@@ -1,0 +1,1344 @@
+#!/bin/bash
+
+PROJECT_DIR=$(pwd)
+
+# ============================================================
+# 0. SETUP JAVA 17
+# ============================================================
+echo "==> [1/10] Setting up Java 17..."
+mkdir -p $HOME/java-17
+cd $HOME/java-17
+if [ ! -d "jdk-17" ]; then
+    wget -q https://download.java.net/java/GA/jdk17.0.2/dfd4a8d0985749f896bed50d7138ee7f/8/GPL/openjdk-17.0.2_linux-x64_bin.tar.gz
+    tar -xzf openjdk-17.0.2_linux-x64_bin.tar.gz
+    mv jdk-17.0.2 jdk-17
+    rm openjdk-17.0.2_linux-x64_bin.tar.gz
+fi
+export JAVA_HOME=$HOME/java-17/jdk-17
+export PATH=$JAVA_HOME/bin:$PATH
+cd "$PROJECT_DIR"
+
+# ============================================================
+# 1. CREATE DIRECTORIES
+# ============================================================
+echo "==> [2/10] Creating directory structures..."
+mkdir -p app/src/main/java/com/javagoat/app
+mkdir -p app/src/main/res/layout
+mkdir -p app/src/main/res/values
+mkdir -p app/src/main/res/menu
+mkdir -p app/src/main/res/drawable
+mkdir -p app/src/main/res/color
+mkdir -p app/src/main/res/anim
+mkdir -p app/src/main/assets
+
+# ============================================================
+# 2. CONFIGURE ANDROID SDK
+# ============================================================
+echo "==> [3/10] Configuring Android SDK..."
+mkdir -p $HOME/android-sdk/cmdline-tools
+cd $HOME/android-sdk/cmdline-tools
+if [ ! -d "latest" ]; then
+    wget -q https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip
+    unzip -q commandlinetools-linux-10406996_latest.zip
+    mv cmdline-tools latest
+    rm commandlinetools-linux-10406996_latest.zip
+fi
+export ANDROID_HOME=$HOME/android-sdk
+export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
+cd "$PROJECT_DIR"
+echo "sdk.dir=$HOME/android-sdk" > local.properties
+yes | sdkmanager --licenses > /dev/null
+# UPDATED: Downloading API 35 instead of 34
+sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools" > /dev/null
+
+# ============================================================
+# 3. ROOT GRADLE BUILD SCRIPTS
+# ============================================================
+echo "==> [4/10] Writing Gradle build scripts..."
+echo "include ':app'" > settings.gradle
+cat <<EOF > gradle.properties
+android.useAndroidX=true
+android.enableJetifier=true
+EOF
+
+cat <<EOF > build.gradle
+buildscript {
+    repositories { google(); mavenCentral() }
+    dependencies { 
+        classpath 'com.android.tools.build:gradle:8.2.0'
+        classpath 'com.google.gms:google-services:4.4.2'
+    }
+}
+allprojects { repositories { google(); mavenCentral() } }
+EOF
+
+cat <<EOF > app/build.gradle
+plugins { 
+    id 'com.android.application'
+    id 'com.google.gms.google-services'
+}
+android {
+    namespace 'com.javagoat.app'
+    compileSdk 35 // UPDATED to 35
+    signingConfigs {
+        release {
+            storeFile file("../my-release-key.jks")
+            storePassword "mypassword123"
+            keyAlias "my-key-alias"
+            keyPassword "mypassword123"
+        }
+    }
+    defaultConfig {
+        applicationId "com.javagoat.app"
+        minSdk 24
+        targetSdk 35 // UPDATED to 35
+        versionCode 2 // UPDATED: Play Console requires incrementing version code
+        versionName "1.0.1"
+    }
+    buildTypes { release { minifyEnabled false; signingConfig signingConfigs.release } }
+    lint { checkReleaseBuilds false; abortOnError false }
+}
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.9.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.cardview:cardview:1.0.0'
+    implementation 'com.github.bumptech.glide:glide:4.16.0'
+    implementation platform('com.google.firebase:firebase-bom:34.18.0')
+    implementation 'com.google.firebase:firebase-database'
+    implementation 'com.google.firebase:firebase-auth'
+    implementation 'com.google.android.gms:play-services-auth:20.7.0'
+    implementation 'com.google.android.gms:play-services-ads:22.6.0'
+    implementation 'androidx.core:core-ktx:1.12.0'
+}
+EOF
+
+# ============================================================
+# 4. KEYSTORE GENERATION
+# ============================================================
+echo "==> [5/10] Generating Keystore..."
+if [ ! -f "my-release-key.jks" ]; then
+    keytool -genkey -v -keystore my-release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias my-key-alias -storepass mypassword123 -keypass mypassword123 -dname "CN=javagoat, OU=ID, O=Example, L=City, ST=State, C=US"
+fi
+export SHA1=$(keytool -list -v -keystore my-release-key.jks -alias my-key-alias -storepass mypassword123 | grep "SHA1:" | awk '{print $2}')
+
+
+
+# ============================================================
+# 5. GOOGLE SERVICES JSON
+# ============================================================
+echo "==> [6/10] Generating google-services.json..."
+# IMPORTANT: You must place your own google-services.json file inside the app/ folder before building, or configure it via the CLI later.
+
+
+
+# ============================================================
+# 6. MANIFEST, STRINGS, COLORS, THEME
+# ============================================================
+echo "==> [7/10] Writing Manifest, Colors & Royal Dark Theme..."
+cat <<'EOF' > app/src/main/AndroidManifest.xml
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
+    <application android:label="JavaGoat" android:icon="@drawable/ic_launcher" android:theme="@style/Theme.JavaGoat">
+        <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713"/>
+        <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustPan">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+EOF
+
+cat <<'EOF' > app/src/main/res/values/strings.xml
+<resources>
+    <string name="app_name">JavaGoat</string>
+    <string name="default_web_client_id">415259880038-glvtl29hb28keokad9sgi9ctermgmqvd.apps.googleusercontent.com</string>
+</resources>
+EOF
+
+cat <<'EOF' > app/src/main/res/values/colors.xml
+<resources>
+    <color name="bg_app">#150A2E</color>
+    <color name="surface">#1E0F38</color>
+    <color name="card">#251243</color>
+    <color name="card_border">#3B2A5E</color>
+    <color name="gold">#FFC93C</color>
+    <color name="gold_deep">#F5A623</color>
+    <color name="gold_text_dark">#2A1B00</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#A79BC0</color>
+    <color name="muted_nav">#7A6B99</color>
+    <color name="green">#2ECC71</color>
+    <color name="error">#FF5A5F</color>
+</resources>
+EOF
+
+cat <<'EOF' > app/src/main/res/values/themes.xml
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.JavaGoat" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="colorPrimary">@color/gold</item>
+        <item name="colorPrimaryDark">@color/bg_app</item>
+        <item name="colorAccent">@color/gold</item>
+        <item name="android:windowBackground">@color/bg_app</item>
+        <item name="android:statusBarColor">@color/bg_app</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">@color/surface</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">false</item>
+    </style>
+</resources>
+EOF
+
+# ============================================================
+# 7. ROYAL DRAWABLES & ANIMATIONS & MAIN LAYOUT
+# ============================================================
+echo "==> [8/10] Creating Royal Gold Drawables, Animations & Layouts..."
+
+cat <<'EOF' > app/src/main/res/anim/pulse_anim.xml
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:interpolator="@android:anim/accelerate_decelerate_interpolator">
+    <scale
+        android:duration="1200"
+        android:fromXScale="1.0"
+        android:fromYScale="1.0"
+        android:toXScale="1.08"
+        android:toYScale="1.08"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:repeatMode="reverse"
+        android:repeatCount="infinite" />
+</set>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_auth_top.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient android:angle="135" android:startColor="#4A1E7A" android:endColor="#241040"/>
+    <corners android:bottomLeftRadius="40dp" android:bottomRightRadius="40dp"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_sheet_top.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#1E0F38"/>
+    <corners android:topLeftRadius="32dp" android:topRightRadius="32dp"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_input.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#251243"/>
+    <stroke android:width="1.5dp" android:color="#3B2A5E"/>
+    <corners android:radius="16dp"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_btn_gold.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient android:angle="135" android:startColor="#FFD700" android:endColor="#F5A623"/>
+    <corners android:radius="28dp"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_balance_green.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient android:angle="135" android:startColor="#0F382B" android:centerColor="#144A38" android:endColor="#0A261D"/>
+    <stroke android:width="1.5dp" android:color="#2ECC71"/>
+    <corners android:radius="20dp"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_btn_green.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient android:angle="135" android:startColor="#4CD97B" android:endColor="#27AE60"/>
+    <corners android:radius="28dp"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_btn_google.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#FFFFFF"/>
+    <corners android:radius="16dp"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_btn_outline_red.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#251243"/>
+    <stroke android:width="1.5dp" android:color="#FF5A5F"/>
+    <corners android:radius="16dp"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_card.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#251243"/>
+    <stroke android:width="1dp" android:color="#3B2A5E"/>
+    <corners android:radius="20dp"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_card_gold.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#2A1548"/>
+    <stroke android:width="1.5dp" android:color="#F5A623"/>
+    <corners android:radius="20dp"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_avatar_ring.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <solid android:color="#3B2A5E"/>
+    <stroke android:width="3dp" android:color="#FFC93C"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_option_btn.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#251243"/>
+    <stroke android:width="1.5dp" android:color="#3B2A5E"/>
+    <corners android:radius="16dp"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_icon_btn.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <solid android:color="#251243"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_timer_pill.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#251243"/>
+    <stroke android:width="1dp" android:color="#F5A623"/>
+    <corners android:radius="22dp"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_topic_pill.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#2A1548"/>
+    <stroke android:width="1dp" android:color="#3B2A5E"/>
+    <corners android:radius="20dp"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_status_live.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#1E4D33"/>
+    <corners android:radius="12dp"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_tab_container.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#1E0F38"/>
+    <stroke android:width="1dp" android:color="#3B2A5E"/>
+    <corners android:radius="24dp"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_tab_active.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient android:angle="135" android:startColor="#FFD700" android:endColor="#F5A623"/>
+    <corners android:radius="24dp"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_rank_banner.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient android:angle="135" android:startColor="#F7B733" android:endColor="#C77E06"/>
+    <corners android:radius="20dp"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_tile_purple.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient android:angle="135" android:startColor="#7B2FF7" android:endColor="#5A1DB8"/>
+    <corners android:radius="16dp"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_tile_blue.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient android:angle="135" android:startColor="#2F80ED" android:endColor="#1B5BB8"/>
+    <corners android:radius="16dp"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_tile_gold.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient android:angle="135" android:startColor="#F7B733" android:endColor="#D4900A"/>
+    <corners android:radius="16dp"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/bg_tile_red.xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient android:angle="135" android:startColor="#EB5757" android:endColor="#B82F2F"/>
+    <corners android:radius="16dp"/>
+</shape>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/progress_gold.xml
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@android:id/background">
+        <shape><solid android:color="#3B2A5E"/><corners android:radius="6dp"/></shape>
+    </item>
+    <item android:id="@android:id/progress">
+        <clip><shape><solid android:color="#FFC93C"/><corners android:radius="6dp"/></shape></clip>
+    </item>
+</layer-list>
+EOF
+
+# ---------- ICON ASSETS ----------
+cat <<'EOF' > app/src/main/res/drawable/ic_crown.xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FFC93C" android:pathData="M5,16L3,6l5.5,4L12,4l3.5,6L21,6l-2,10H5zM5,18h14v2H5z"/></vector>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/ic_nav_home.xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M10,20v-6h4v6h5v-8h3L12,3 2,12h3v8z"/></vector>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/ic_nav_trophy.xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M19,5h-2V3H7v2H5c-1.1,0 -2,0.9 -2,2v1c0,2.55 1.92,4.63 4.39,4.94c0.63,1.5 1.98,2.63 3.61,2.96V19H7v2h10v-2h-4v-3.1c1.63,-0.33 2.98,-1.46 3.61,-2.96C19.08,12.63 21,10.55 21,8V7c0,-1.1 -0.9,-2 -2,-2zM5,8V7h2v3.82C5.84,10.4 5,9.3 5,8zm14,0c0,1.3 -0.84,2.4 -2,2.82V7h2v1z"/></vector>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/ic_nav_chart.xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M5,9.2h3V19H5zM10.6,5h2.8v14h-2.8zM16.2,13H19v6h-2.8z"/></vector>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/ic_nav_profile.xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FF000000" android:pathData="M12,12c2.21,0 4,-1.79 4,-4s-1.79,-4 -4,-4 -4,1.79 -4,4 1.79,4 4,4zM12,14c-2.67,0 -8,1.34 -8,4v2h16v-2c0,-2.66 -5.33,-4 -8,-4z"/></vector>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/ic_shield.xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="40dp" android:height="40dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#7B2FF7" android:pathData="M12,1L3,5v6c0,5.55 3.84,10.74 9,12 5.16,-1.26 9,-6.45 9,-12V5l-9,-4z"/><path android:fillColor="#FFD700" android:pathData="M12,6.5l1.76,3.57 3.94,0.57 -2.85,2.78 0.67,3.92L12,15.5l-3.52,1.84 0.67,-3.92 -2.85,-2.78 3.94,-0.57z"/></vector>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/ic_chevron.xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="20dp" android:height="20dp" android:viewportWidth="24" android:viewportHeight="24" android:tint="#A79BC0"><path android:fillColor="#FF000000" android:pathData="M8.59,16.59L13.17,12 8.59,7.41 10,6l6,6 -6,6z"/></vector>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/ic_gift.xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="22dp" android:height="22dp" android:viewportWidth="24" android:viewportHeight="24" android:tint="#FFC93C"><path android:fillColor="#FF000000" android:pathData="M20,6h-2.18c0.05,-0.31 0.18,-0.6 0.18,-1 0,-1.66 -1.34,-3 -3,-3 -1.05,0 -1.96,0.54 -2.5,1.35l-0.5,0.67 -0.5,-0.67C10.96,2.54 10.05,2 9,2 7.34,2 6,3.34 6,5c0,0.4 0.13,0.69 0.18,1H4c-1.11,0 -1.99,0.89 -1.99,2L2,19c0,1.11 0.89,2 2,2h16c1.11,0 2,-0.89 2,-2V8c0,-1.11 -0.89,-2 -2,-2zM15,4c0.55,0 1,0.45 1,1s-0.45,1 -1,1 -1,-0.45 -1,-1 0.45,-1 1,-1zM9,4c0.55,0 1,0.45 1,1s-0.45,1 -1,1 -1,-0.45 -1,-1 0.45,-1 1,-1zM20,19H4v-2h16v2zM20,10H4V8h16v2z"/></vector>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/ic_clock.xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="22dp" android:height="22dp" android:viewportWidth="24" android:viewportHeight="24" android:tint="#FFC93C"><path android:fillColor="#FF000000" android:pathData="M11.99,2C6.47,2 2,6.48 2,12s4.47,10 9.99,10C17.52,22 22,17.52 22,12S17.52,2 11.99,2zM12,20c-4.42,0 -8,-3.58 -8,-8s3.58,-8 8,-8 8,3.58 8,8 -3.58,8 -8,8zM12.5,7H11v6l5.25,3.15 0.75,-1.23 -4.5,-2.67z"/></vector>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/ic_people.xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="22dp" android:height="22dp" android:viewportWidth="24" android:viewportHeight="24" android:tint="#FFC93C"><path android:fillColor="#FF000000" android:pathData="M16,11c1.66,0 2.99,-1.34 2.99,-3S17.66,5 16,5c-1.66,0 -3,1.34 -3,3s1.34,3 3,3zM8,11c1.66,0 2.99,-1.34 2.99,-3S9.66,5 8,5C6.34,5 5,6.34 5,8s1.34,3 3,3zM8,13c-2.33,0 -7,1.17 -7,3.5L1,19h14v-2.5c0,-2.33 -4.67,-3.5 -7,-3.5zM16,13c-0.29,0 -0.62,0.02 -0.97,0.05 1.16,0.84 1.97,1.97 1.97,3.45L17,19h6v-2.5c0,-2.33 -4.67,-3.5 -7,-3.5z"/></vector>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/ic_help.xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="22dp" android:height="22dp" android:viewportWidth="24" android:viewportHeight="24" android:tint="#FFC93C"><path android:fillColor="#FF000000" android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM13,17h-2v-2h2v2zM13,13h-2c0,-1.5 2,-1.5 2,-3 0,-0.83 -0.67,-1.5 -1.5,-1.5S10,9.17 10,10H8c0,-2.21 1.79,-4 4,-4s4,1.79 4,4c0,2.5 -3,2.75 -3,5z"/></vector>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/ic_logout.xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="22dp" android:height="22dp" android:viewportWidth="24" android:viewportHeight="24" android:tint="#FF5A5F"><path android:fillColor="#FF000000" android:pathData="M17,7l-1.41,1.41L18.17,11H8v2h10.17l-2.58,2.58L17,17l5,-5zM4,5h8V3H4c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,2 2,2h8v-2H4V5z"/></vector>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/ic_google.xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#4285F4" android:pathData="M22.56,12.25c0,-0.78 -0.07,-1.53 -0.2,-2.25H12v4.26h5.92c-0.26,1.37 -1.04,2.53 -2.21,3.31v2.77h3.57c2.08,-1.92 3.28,-4.74 3.28,-8.09z"/>
+    <path android:fillColor="#34A853" android:pathData="M12,23c2.97,0 5.46,-0.98 7.28,-2.66l-3.57,-2.77c-0.98,0.66 -2.23,1.06 -3.71,1.06 -2.86,0 -5.29,-1.93 -6.16,-4.53H2.18v2.84C3.99,20.53 7.7,23 12,23z"/>
+    <path android:fillColor="#FBBC05" android:pathData="M5.84,14.09c-0.22,-0.66 -0.35,-1.36 -0.35,-2.09s0.13,-1.43 0.35,-2.09V7.07H2.18C1.43,8.55 1,10.22 1,12s0.43,3.45 1.18,4.93l2.85,-2.22 0.81,-0.62z"/>
+    <path android:fillColor="#EA4335" android:pathData="M12,5.38c1.62,0 3.06,0.56 4.21,1.64l3.15,-3.15C17.45,2.09 14.97,1 12,1 7.7,1 3.99,3.47 2.18,7.07l3.66,2.84c0.87,-2.6 3.3,-4.53 6.16,-4.53z"/>
+</vector>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/ic_user.xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24" android:tint="#A79BC0"><path android:fillColor="#FF000000" android:pathData="M12,12c2.21,0 4,-1.79 4,-4s-1.79,-4 -4,-4 -4,1.79 -4,4 1.79,4 4,4zM12,14c-2.67,0 -8,1.34 -8,4v2h16v-2c0,-2.66 -5.33,-4 -8,-4z"/></vector>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/ic_email.xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24" android:tint="#A79BC0"><path android:fillColor="#FF000000" android:pathData="M20,4H4C2.9,4 2.01,4.9 2.01,6L2,18c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V6C22,4.9 21.1,4 20,4zM20,8l-8,5 -8,-5V6l8,5 8,-5V8z"/></vector>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/ic_lock.xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24" android:tint="#A79BC0"><path android:fillColor="#FF000000" android:pathData="M18,8h-1V6c0,-2.76 -2.24,-5 -5,-5S7,3.24 7,6v2H6c-1.1,0 -2,0.9 -2,2v10c0,1.1 0.9,2 2,2h12c1.1,0 2,-0.9 2,-2V10C20,8.9 19.1,8 18,8zM9,6c0,-1.66 1.34,-3 3,-3s3,1.34 3,3v2H9V6z"/></vector>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/ic_trophy.xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="64dp" android:height="64dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FFD700" android:pathData="M19,5h-2V3H7v2H5C3.9,5 3,5.9 3,7v1c0,2.55 1.92,4.63 4.39,4.94c0.63,1.5 1.98,2.63 3.61,2.96V19H7v2h10v-2h-4v-3.1c1.63,-0.33 2.98,-1.46 3.61,-2.96C19.08,12.63 21,10.55 21,8V7C21,5.9 20.1,5 19,5zM5,8V7h2v3.82C5.84,10.4 5,9.3 5,8zM19,8c0,1.3 -0.84,2.4 -2,2.82V7h2V8z"/></vector>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/ic_coin.xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FFC93C" android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2z"/><path android:fillColor="#D4900A" android:pathData="M12,15c-1.66,0 -3,-1.34 -3,-3s1.34,-3 3,-3 3,1.34 3,3 -1.34,3 -3,3z"/></vector>
+EOF
+
+cat <<'EOF' > app/src/main/res/drawable/ic_launcher.xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#150A2E" android:pathData="M0,0h24v24H0z"/><path android:fillColor="#FFC93C" android:pathData="M5,16L3,6l5.5,4L12,4l3.5,6L21,6l-2,10H5zM5,18h14v2H5z"/></vector>
+EOF
+
+cat <<'EOF' > app/src/main/res/menu/bottom_nav_menu.xml
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/nav_home" android:title="Dashboard" android:icon="@drawable/ic_nav_home"/>
+    <item android:id="@+id/nav_categories" android:title="Tournament" android:icon="@drawable/ic_nav_trophy"/>
+    <item android:id="@+id/nav_rank" android:title="Leaderboard" android:icon="@drawable/ic_nav_chart"/>
+    <item android:id="@+id/nav_profile" android:title="Profile" android:icon="@drawable/ic_nav_profile"/>
+</menu>
+EOF
+
+cat <<'EOF' > app/src/main/res/color/bottom_nav_color.xml
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true" android:color="@color/gold"/>
+    <item android:color="@color/muted_nav"/>
+</selector>
+EOF
+
+# ---------- ITEM LAYOUTS ----------
+cat <<'EOF' > app/src/main/res/layout/item_category.xml
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:gravity="center" android:padding="6dp">
+    <LinearLayout android:id="@+id/cardCategoryBg" android:layout_width="match_parent" android:layout_height="80dp" android:background="@drawable/bg_tile_purple" android:gravity="center">
+        <TextView android:id="@+id/catIcon" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🧩" android:textSize="34sp"/>
+    </LinearLayout>
+    <TextView android:id="@+id/catTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="General" android:textColor="@color/text_primary" android:textSize="12sp" android:textStyle="bold" android:gravity="center" android:singleLine="true" android:layout_marginTop="8dp"/>
+</LinearLayout>
+EOF
+
+cat <<'EOF' > app/src/main/res/layout/item_tournament.xml
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:background="@drawable/bg_card" android:padding="16dp" android:layout_marginBottom="14dp" android:gravity="center_vertical">
+    <ImageView android:id="@+id/tCupImage" android:layout_width="52dp" android:layout_height="52dp" android:src="@drawable/ic_trophy" android:layout_marginEnd="14dp"/>
+    <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
+        <TextView android:id="@+id/tTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Tournament" android:textColor="@color/text_primary" android:textStyle="bold" android:textSize="16sp"/>
+        <TextView android:id="@+id/tDetails" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Entry: 10 | Players: 100" android:textColor="@color/text_secondary" android:textSize="13sp" android:layout_marginTop="2dp"/>
+    </LinearLayout>
+    <androidx.appcompat.widget.AppCompatButton android:id="@+id/btnPlayTournament" android:layout_width="wrap_content" android:layout_height="40dp" android:text="JOIN" android:background="@drawable/bg_btn_gold" android:textColor="@color/gold_text_dark" android:textStyle="bold" android:textSize="13sp" android:paddingStart="18dp" android:paddingEnd="18dp"/>
+</LinearLayout>
+EOF
+
+cat <<'EOF' > app/src/main/res/layout/item_leaderboard.xml
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:background="@drawable/bg_card" android:padding="14dp" android:layout_marginBottom="10dp" android:gravity="center_vertical">
+    <TextView android:id="@+id/lbRank" android:layout_width="36dp" android:layout_height="wrap_content" android:text="#1" android:textColor="@color/gold" android:textStyle="bold" android:textSize="16sp"/>
+    <TextView android:id="@+id/lbName" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Username" android:textColor="@color/text_primary" android:textStyle="bold" android:textSize="15sp"/>
+    <TextView android:id="@+id/lbScore" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🪙 100" android:textColor="@color/gold" android:textStyle="bold" android:textSize="15sp"/>
+</LinearLayout>
+EOF
+
+cat <<'EOF' > app/src/main/res/layout/dialog_result.xml
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="320dp" android:layout_height="wrap_content"
+    android:orientation="vertical" android:gravity="center"
+    android:background="@drawable/bg_card_gold" android:padding="32dp">
+    <TextView android:id="@+id/dialogIcon" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="" android:textSize="72sp" android:layout_marginBottom="16dp"/>
+    <TextView android:id="@+id/dialogTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Congratulations!" android:textColor="@color/gold" android:textSize="24sp" android:textStyle="bold" android:gravity="center" android:layout_marginBottom="12dp"/>
+    <TextView android:id="@+id/dialogMessage" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="You won 100 coins!" android:textColor="@color/text_secondary" android:textSize="15sp" android:gravity="center" android:layout_marginBottom="28dp"/>
+    <androidx.appcompat.widget.AppCompatButton android:id="@+id/dialogBtn" android:layout_width="match_parent" android:layout_height="50dp" android:text="AWESOME" android:background="@drawable/bg_btn_gold" android:textColor="@color/gold_text_dark" android:textStyle="bold"/>
+</LinearLayout>
+EOF
+
+# ---------- MAIN LAYOUT ----------
+cat <<'EOF' > app/src/main/res/layout/activity_main.xml
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="@color/bg_app">
+
+    <!-- ============ AUTH (Royal Dark) ============ -->
+    <LinearLayout android:id="@+id/authView" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:visibility="visible">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="250dp" android:orientation="vertical" android:gravity="center" android:background="@drawable/bg_auth_top">
+            <ImageView android:layout_width="56dp" android:layout_height="56dp" android:src="@drawable/ic_crown" android:layout_marginBottom="6dp"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="QUIZ ARENA" android:textColor="@color/gold" android:textSize="30sp" android:textStyle="bold" android:letterSpacing="0.1"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Play • Learn • Win Coins" android:textColor="@color/text_secondary" android:textSize="13sp" android:layout_marginTop="4dp"/>
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="@drawable/bg_sheet_top" android:padding="24dp" android:layout_marginTop="-32dp" android:elevation="8dp">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Welcome Back" android:textColor="@color/text_primary" android:textSize="26sp" android:textStyle="bold" android:layout_marginBottom="6dp"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Sign in to continue your journey" android:textColor="@color/text_secondary" android:textSize="14sp" android:layout_marginBottom="28dp"/>
+
+            <EditText android:id="@+id/authUsername" android:layout_width="match_parent" android:layout_height="54dp" android:hint="Username" android:background="@drawable/bg_input" android:paddingStart="16dp" android:paddingEnd="16dp" android:textColor="@color/text_primary" android:textColorHint="@color/text_secondary" android:layout_marginBottom="14dp" android:visibility="gone"/>
+            <EditText android:id="@+id/authEmail" android:layout_width="match_parent" android:layout_height="54dp" android:hint="Email Address" android:inputType="textEmailAddress" android:background="@drawable/bg_input" android:paddingStart="16dp" android:paddingEnd="16dp" android:textColor="@color/text_primary" android:textColorHint="@color/text_secondary" android:layout_marginBottom="14dp"/>
+            <EditText android:id="@+id/authPass" android:layout_width="match_parent" android:layout_height="54dp" android:hint="Password" android:inputType="textPassword" android:background="@drawable/bg_input" android:paddingStart="16dp" android:paddingEnd="16dp" android:textColor="@color/text_primary" android:textColorHint="@color/text_secondary" android:layout_marginBottom="22dp"/>
+
+            <androidx.appcompat.widget.AppCompatButton android:id="@+id/btnAuthSubmit" android:layout_width="match_parent" android:layout_height="54dp" android:text="LOGIN" android:background="@drawable/bg_btn_gold" android:textColor="@color/gold_text_dark" android:textSize="16sp" android:textStyle="bold" android:layout_marginBottom="14dp" android:elevation="4dp"/>
+
+            <LinearLayout android:id="@+id/btnGoogleSignIn" android:layout_width="match_parent" android:layout_height="54dp" android:background="@drawable/bg_btn_google" android:gravity="center" android:clickable="true" android:focusable="true">
+                <ImageView android:layout_width="22dp" android:layout_height="22dp" android:src="@drawable/ic_google"/>
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Continue with Google" android:textColor="#1D133B" android:textStyle="bold" android:textSize="15sp" android:layout_marginStart="10dp"/>
+            </LinearLayout>
+
+            <TextView android:id="@+id/btnToggleAuth" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="New User? Register here" android:textColor="@color/gold" android:textSize="14sp" android:gravity="center" android:layout_marginTop="26dp" android:textStyle="bold"/>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- ============ MAIN APP ============ -->
+    <RelativeLayout android:id="@+id/mainAppView" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
+        
+        <!-- BANNER AD VIEW -->
+        <com.google.android.gms.ads.AdView
+            android:id="@+id/adView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_above="@id/bottomNav"
+            android:layout_centerHorizontal="true"
+            app:adSize="BANNER"
+            app:adUnitId="ca-app-pub-3940256099942544/6300978111" />
+
+        <FrameLayout android:id="@+id/pageContainer" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_above="@id/adView">
+
+            <!-- HOME -->
+            <androidx.core.widget.NestedScrollView android:id="@+id/pageHome" android:layout_width="match_parent" android:layout_height="match_parent" android:clipToPadding="false" android:paddingBottom="20dp" android:visibility="visible">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+
+                    <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/bg_card" android:padding="14dp" android:layout_marginTop="8dp" android:layout_marginBottom="14dp">
+                        <ImageView android:id="@+id/imgUserAvatar" android:layout_width="52dp" android:layout_height="52dp" android:src="@drawable/ic_user" android:background="@drawable/bg_avatar_ring" android:padding="10dp" android:layout_centerVertical="true"/>
+                        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="vertical" android:layout_toEndOf="@id/imgUserAvatar" android:layout_marginStart="12dp" android:layout_centerVertical="true">
+                            <TextView android:id="@+id/tvUserName" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Hello, Player 👋" android:textColor="@color/text_primary" android:textSize="17sp" android:textStyle="bold"/>
+                            <ProgressBar android:layout_width="140dp" android:layout_height="6dp" android:progress="65" android:progressDrawable="@drawable/progress_gold" android:layout_marginTop="6dp" style="?android:attr/progressBarStyleHorizontal"/>
+                        </LinearLayout>
+                        <ImageView android:layout_width="34dp" android:layout_height="34dp" android:src="@drawable/ic_shield" android:layout_alignParentEnd="true" android:layout_centerVertical="true"/>
+                    </RelativeLayout>
+
+                    <!-- Wallet / Prize Pool Card -->
+                    <RelativeLayout android:layout_width="match_parent" android:layout_height="150dp" android:background="@drawable/bg_balance_green" android:padding="18dp" android:layout_marginBottom="16dp">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="AVAILABLE BALANCE" android:textColor="@color/gold" android:textSize="12sp" android:textStyle="bold" android:letterSpacing="0.08"/>
+                        <LinearLayout android:id="@+id/llCoinVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="26dp">
+                            <ImageView android:layout_width="30dp" android:layout_height="30dp" android:src="@drawable/ic_coin"/>
+                            <TextView android:id="@+id/tvMainCoins" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="100" android:textColor="@color/gold" android:textSize="34sp" android:textStyle="bold" android:layout_marginStart="10dp"/>
+                        </LinearLayout>
+                        <ImageView android:id="@+id/homeTrophy3D" android:layout_width="86dp" android:layout_height="86dp" android:src="@drawable/ic_trophy" android:layout_alignParentEnd="true" android:layout_centerVertical="true"/>
+                        <androidx.appcompat.widget.AppCompatButton android:id="@+id/btnEarnMoreCoins" android:layout_width="wrap_content" android:layout_height="38dp" android:layout_below="@id/llCoinVal" android:layout_marginTop="12dp" android:text="WATCH AD +50" android:background="@drawable/bg_btn_gold" android:textColor="@color/gold_text_dark" android:textStyle="bold" android:textSize="12sp" android:paddingStart="18dp" android:paddingEnd="18dp"/>
+                    </RelativeLayout>
+
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Top Categories" android:textColor="@color/text_primary" android:textSize="17sp" android:textStyle="bold" android:layout_marginBottom="12dp"/>
+                    <androidx.recyclerview.widget.RecyclerView android:id="@+id/recyclerCategories" android:layout_width="match_parent" android:layout_height="wrap_content" android:nestedScrollingEnabled="false"/>
+                </LinearLayout>
+            </androidx.core.widget.NestedScrollView>
+
+            <!-- TOURNAMENTS -->
+            <LinearLayout android:id="@+id/pageCategories" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="16dp" android:visibility="gone">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="TOURNAMENT" android:textColor="@color/text_primary" android:textSize="20sp" android:textStyle="bold" android:layout_marginTop="8dp" android:layout_marginBottom="14dp"/>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="44dp" android:background="@drawable/bg_tab_container" android:orientation="horizontal" android:gravity="center" android:padding="4dp" android:layout_marginBottom="16dp">
+                    <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="ONGOING" android:gravity="center" android:textSize="12sp" android:textStyle="bold" android:textColor="@color/gold_text_dark" android:background="@drawable/bg_tab_active"/>
+                    <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="UPCOMING" android:gravity="center" android:textSize="12sp" android:textStyle="bold" android:textColor="@color/text_secondary"/>
+                    <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="COMPLETED" android:gravity="center" android:textSize="12sp" android:textStyle="bold" android:textColor="@color/text_secondary"/>
+                </LinearLayout>
+                <androidx.recyclerview.widget.RecyclerView android:id="@+id/recyclerTournamentsFull" android:layout_width="match_parent" android:layout_height="match_parent"/>
+            </LinearLayout>
+
+            <!-- LEADERBOARD -->
+            <LinearLayout android:id="@+id/pageRank" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="16dp" android:visibility="gone">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="LEADERBOARD" android:textColor="@color/text_primary" android:textSize="20sp" android:textStyle="bold" android:layout_marginTop="8dp" android:layout_marginBottom="14dp"/>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="44dp" android:background="@drawable/bg_tab_container" android:orientation="horizontal" android:gravity="center" android:padding="4dp" android:layout_marginBottom="16dp">
+                    <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="GLOBAL" android:gravity="center" android:textSize="12sp" android:textStyle="bold" android:textColor="@color/gold_text_dark" android:background="@drawable/bg_tab_active"/>
+                    <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="COUNTRY" android:gravity="center" android:textSize="12sp" android:textStyle="bold" android:textColor="@color/text_secondary"/>
+                    <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="FRIENDS" android:gravity="center" android:textSize="12sp" android:textStyle="bold" android:textColor="@color/text_secondary"/>
+                </LinearLayout>
+                <androidx.recyclerview.widget.RecyclerView android:id="@+id/recyclerLeaderboardFull" android:layout_width="match_parent" android:layout_height="match_parent"/>
+            </LinearLayout>
+
+            <!-- PROFILE -->
+            <LinearLayout android:id="@+id/pageProfile" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="16dp" android:visibility="gone">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:gravity="center_horizontal" android:background="@drawable/bg_card" android:padding="20dp" android:layout_marginTop="8dp">
+                    <ImageView android:id="@+id/imgProfileAvatar" android:layout_width="90dp" android:layout_height="90dp" android:src="@drawable/ic_user" android:background="@drawable/bg_avatar_ring" android:padding="22dp"/>
+                    <TextView android:id="@+id/profName" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Player" android:textColor="@color/text_primary" android:textSize="22sp" android:textStyle="bold" android:layout_marginTop="10dp"/>
+                    <TextView android:id="@+id/profEmail" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="player@email.com" android:textColor="@color/text_secondary" android:textSize="14sp"/>
+                    
+                    <androidx.appcompat.widget.AppCompatButton android:id="@+id/btnEditProfile" android:layout_width="140dp" android:layout_height="36dp" android:text="EDIT PROFILE" android:background="@drawable/bg_btn_gold" android:textColor="@color/gold_text_dark" android:textStyle="bold" android:textSize="12sp" android:layout_marginTop="12dp"/>
+
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="18dp">
+                        <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical" android:gravity="center" android:background="@drawable/bg_topic_pill" android:padding="10dp">
+                            <TextView android:id="@+id/profCoins" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🪙 100" android:textColor="@color/gold" android:textStyle="bold" android:textSize="15sp"/>
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Total Coins" android:textColor="@color/text_secondary" android:textSize="11sp"/>
+                        </LinearLayout>
+                        <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical" android:gravity="center" android:background="@drawable/bg_topic_pill" android:padding="10dp" android:layout_marginStart="8dp">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🏆 85%" android:textColor="@color/gold" android:textStyle="bold" android:textSize="15sp"/>
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Win Rate" android:textColor="@color/text_secondary" android:textSize="11sp"/>
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/bg_rank_banner" android:padding="16dp" android:layout_marginTop="14dp">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Your Rank" android:textColor="#3A2400" android:textSize="13sp" android:textStyle="bold"/>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="#2,345" android:textColor="#2A1B00" android:textSize="26sp" android:textStyle="bold" android:layout_marginTop="18dp"/>
+                    <ImageView android:layout_width="52dp" android:layout_height="52dp" android:src="@drawable/ic_shield" android:layout_alignParentEnd="true" android:layout_centerVertical="true"/>
+                </RelativeLayout>
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="@drawable/bg_card" android:padding="6dp" android:layout_marginTop="14dp">
+                    <TextView android:id="@+id/menuAchievements" android:layout_width="match_parent" android:layout_height="50dp" android:text="   🏅  Achievements" android:gravity="center_vertical" android:textColor="@color/text_primary" android:textSize="15sp" android:drawableEnd="@drawable/ic_chevron" android:paddingEnd="14dp" android:clickable="true" android:focusable="true"/>
+                    <TextView android:id="@+id/menuRewards" android:layout_width="match_parent" android:layout_height="50dp" android:text="   🎁  Rewards" android:gravity="center_vertical" android:textColor="@color/text_primary" android:textSize="15sp" android:drawableEnd="@drawable/ic_chevron" android:paddingEnd="14dp" android:clickable="true" android:focusable="true"/>
+                    <TextView android:id="@+id/menuHistory" android:layout_width="match_parent" android:layout_height="50dp" android:text="   🕐  History" android:gravity="center_vertical" android:textColor="@color/text_primary" android:textSize="15sp" android:drawableEnd="@drawable/ic_chevron" android:paddingEnd="14dp" android:clickable="true" android:focusable="true"/>
+                    <TextView android:id="@+id/menuReferEarn" android:layout_width="match_parent" android:layout_height="50dp" android:text="   👥  Refer &amp; Earn" android:gravity="center_vertical" android:textColor="@color/text_primary" android:textSize="15sp" android:drawableEnd="@drawable/ic_chevron" android:paddingEnd="14dp" android:clickable="true" android:focusable="true"/>
+                </LinearLayout>
+
+                <androidx.appcompat.widget.AppCompatButton android:id="@+id/btnDailyClaim" android:layout_width="match_parent" android:layout_height="52dp" android:text="CLAIM DAILY BONUS (+20)" android:background="@drawable/bg_btn_gold" android:textColor="@color/gold_text_dark" android:textStyle="bold" android:layout_marginTop="14dp"/>
+                <androidx.appcompat.widget.AppCompatButton android:id="@+id/btnProfileLogout" android:layout_width="match_parent" android:layout_height="52dp" android:text="LOGOUT" android:background="@drawable/bg_btn_outline_red" android:textColor="@color/error" android:textStyle="bold" android:layout_marginTop="10dp"/>
+            </LinearLayout>
+        </FrameLayout>
+
+        <com.google.android.material.bottomnavigation.BottomNavigationView android:id="@+id/bottomNav" android:layout_width="match_parent" android:layout_height="68dp" android:layout_alignParentBottom="true" android:background="@color/surface" app:itemTextColor="@color/bottom_nav_color" app:itemIconTint="@color/bottom_nav_color" app:menu="@menu/bottom_nav_menu" app:labelVisibilityMode="labeled" android:elevation="16dp"/>
+    </RelativeLayout>
+
+    <!-- ============ QUIZ (Royal Dark KBC) ============ -->
+    <RelativeLayout android:id="@+id/kbcQuizContainer" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/bg_app" android:visibility="gone" android:padding="18dp">
+        <RelativeLayout android:id="@+id/quizTopBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:layout_marginBottom="18dp">
+            <ImageButton android:id="@+id/btnCloseQuiz" android:layout_width="42dp" android:layout_height="42dp" android:src="@android:drawable/ic_menu_close_clear_cancel" android:background="@drawable/bg_icon_btn" android:tint="@color/text_primary" android:layout_alignParentStart="true" android:layout_centerVertical="true" android:padding="10dp"/>
+            <TextView android:id="@+id/quizHeader" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Question 1/10" android:textColor="@color/gold" android:textSize="16sp" android:textStyle="bold" android:layout_centerInParent="true"/>
+            <LinearLayout android:layout_width="wrap_content" android:layout_height="42dp" android:background="@drawable/bg_timer_pill" android:paddingStart="16dp" android:paddingEnd="16dp" android:layout_alignParentEnd="true" android:layout_centerVertical="true" android:gravity="center">
+                <TextView android:id="@+id/tvTimer" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="⏳ 15s" android:textColor="@color/gold" android:textSize="15sp" android:textStyle="bold"/>
+            </LinearLayout>
+        </RelativeLayout>
+
+        <LinearLayout android:id="@+id/quizTopicBanner" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_below="@id/quizTopBar" android:layout_centerHorizontal="true" android:layout_marginBottom="20dp" android:background="@drawable/bg_topic_pill" android:orientation="horizontal" android:gravity="center" android:paddingStart="20dp" android:paddingEnd="20dp" android:paddingTop="8dp" android:paddingBottom="8dp">
+            <TextView android:id="@+id/quizTopicIcon" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="📚" android:textSize="20sp" android:layout_marginEnd="8dp"/>
+            <TextView android:id="@+id/quizTopicName" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Category" android:textColor="@color/gold" android:textSize="15sp" android:textStyle="bold"/>
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/questionCard" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/bg_card_gold" android:layout_below="@id/quizTopicBanner" android:layout_marginBottom="26dp" android:padding="26dp" android:gravity="center" android:minHeight="170dp">
+            <TextView android:id="@+id/tvQuestion" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Question..." android:textColor="@color/text_primary" android:textSize="21sp" android:textStyle="bold" android:gravity="center" android:lineSpacingExtra="4dp"/>
+        </LinearLayout>
+
+        <TextView android:id="@+id/quizPointsCurrent" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Winning: 0 Coins" android:textColor="@color/gold" android:textSize="14sp" android:textStyle="bold" android:layout_above="@id/llOptions" android:layout_centerHorizontal="true" android:layout_marginBottom="14dp"/>
+
+        <LinearLayout android:id="@+id/llOptions" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_alignParentBottom="true" android:layout_marginBottom="16dp">
+            <androidx.appcompat.widget.AppCompatButton android:id="@+id/btnOpt1" android:layout_width="match_parent" android:layout_height="60dp" android:text="A. Opt" android:textColor="@color/text_primary" android:background="@drawable/bg_option_btn" android:layout_marginBottom="12dp" android:textAllCaps="false" android:gravity="start|center_vertical" android:paddingStart="22dp" android:textStyle="bold" android:textSize="15sp"/>
+            <androidx.appcompat.widget.AppCompatButton android:id="@+id/btnOpt2" android:layout_width="match_parent" android:layout_height="60dp" android:text="B. Opt" android:textColor="@color/text_primary" android:background="@drawable/bg_option_btn" android:layout_marginBottom="12dp" android:textAllCaps="false" android:gravity="start|center_vertical" android:paddingStart="22dp" android:textStyle="bold" android:textSize="15sp"/>
+            <androidx.appcompat.widget.AppCompatButton android:id="@+id/btnOpt3" android:layout_width="match_parent" android:layout_height="60dp" android:text="C. Opt" android:textColor="@color/text_primary" android:background="@drawable/bg_option_btn" android:layout_marginBottom="12dp" android:textAllCaps="false" android:gravity="start|center_vertical" android:paddingStart="22dp" android:textStyle="bold" android:textSize="15sp"/>
+            <androidx.appcompat.widget.AppCompatButton android:id="@+id/btnOpt4" android:layout_width="match_parent" android:layout_height="60dp" android:text="D. Opt" android:textColor="@color/text_primary" android:background="@drawable/bg_option_btn" android:textAllCaps="false" android:gravity="start|center_vertical" android:paddingStart="22dp" android:textStyle="bold" android:textSize="15sp"/>
+        </LinearLayout>
+    </RelativeLayout>
+</RelativeLayout>
+EOF
+
+# ============================================================
+# 8. MAINACTIVITY.JAVA
+# ============================================================
+echo "==> [9/10] Writing MainActivity.java..."
+cat <<'EOF' > app/src/main/java/com/javagoat/app/MainActivity.java
+package com.javagoat.app;
+
+import android.app.Dialog;
+import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.CountDownTimer;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
+import android.widget.*;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.recyclerview.widget.*;
+import androidx.core.content.ContextCompat;
+import com.bumptech.glide.Glide;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.firebase.auth.*;
+import com.google.firebase.database.*;
+import com.google.android.gms.auth.api.signin.*;
+import com.google.android.gms.common.api.ApiException;
+import com.google.android.gms.tasks.Task;
+import com.google.android.gms.ads.*;
+import com.google.android.gms.ads.rewarded.RewardedAd;
+import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback;
+import com.google.android.gms.ads.interstitial.InterstitialAd;
+import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback;
+import java.util.*;
+
+public class MainActivity extends AppCompatActivity {
+
+    private FirebaseAuth auth;
+    private DatabaseReference db;
+    private GoogleSignInClient mGoogleSignInClient;
+    
+    // AdMob Variables
+    private RewardedAd mRewardedAd;
+    private InterstitialAd mInterstitialAd;
+    private AdView mAdView;
+
+    private View authView, mainAppView, pageHome, pageCategories, pageRank, pageProfile;
+    private EditText authUser, authEmail, authPass;
+    private Button btnAuthSubmit;
+    private TextView btnToggleAuth, tvUserName, tvMainCoins, profName, profEmail, profCoins;
+    private ImageView imgUserAvatar, imgProfileAvatar, homeTrophy3D;
+    private BottomNavigationView bottomNav;
+    private RecyclerView recyclerCategories, recyclerTournamentsFull, recyclerLeaderboardFull;
+
+    private View quizContainer, quizTopicBanner;
+    private TextView quizHeader, quizPointsCurrent, tvQuestion, tvTimer, quizTopicIcon, quizTopicName;
+    private Button[] btnOpts = new Button[4];
+    private CountDownTimer countDownTimer;
+
+    private boolean isLoginMode = true;
+    private int userCoins = 100;
+    private String userNameStr = "Player";
+
+    private List<Tournament> tournamentList = new ArrayList<>();
+    private List<User> leaderboardList = new ArrayList<>();
+    private List<QuickCategory> quickCategoryList = new ArrayList<>();
+
+    private int currentQIndex = 0;
+    private int coinsEarnedInQuiz = 0;
+    private int correctAnswersCount = 0;
+    private Tournament activeTournament = null;
+    private QuickCategory activeQuickCategory = null;
+    private List<QuizQuestion> currentQuizQuestions = new ArrayList<>();
+
+    private final ActivityResultLauncher<Intent> googleSignInLauncher = registerForActivityResult(
+        new ActivityResultContracts.StartActivityForResult(),
+        result -> {
+            try {
+                Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(result.getData());
+                GoogleSignInAccount account = task.getResult(ApiException.class);
+                if (account != null) firebaseAuthWithGoogle(account.getIdToken());
+            } catch (ApiException e) {
+                Toast.makeText(this, "Google Login Failed (Code: " + e.getStatusCode() + ")", Toast.LENGTH_LONG).show();
+            }
+        }
+    );
+
+    @Override protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        initFirebase(); initGoogleAuth(); initViews(); setupListeners(); initAds();
+        loadQuickCategoriesFromFirebase();
+        if (auth.getCurrentUser() != null) showMainApp();
+    }
+
+    private void initFirebase() { auth = FirebaseAuth.getInstance(); db = FirebaseDatabase.getInstance().getReference(); }
+
+    private void initGoogleAuth() {
+        GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).requestIdToken(getString(R.string.default_web_client_id)).requestEmail().build();
+        mGoogleSignInClient = GoogleSignIn.getClient(this, gso);
+    }
+
+    private void initAds() {
+        MobileAds.initialize(this, status -> {});
+
+        // 1. Load Rewarded Ad
+        RewardedAd.load(this, "ca-app-pub-3940256099942544/5224354917", new AdRequest.Builder().build(),
+            new RewardedAdLoadCallback() {
+                @Override public void onAdLoaded(@NonNull RewardedAd ad) { mRewardedAd = ad; }
+                @Override public void onAdFailedToLoad(@NonNull LoadAdError e) { mRewardedAd = null; }
+            });
+            
+        // 2. Load Banner Ad
+        mAdView = findViewById(R.id.adView);
+        if (mAdView != null) {
+            AdRequest adRequest = new AdRequest.Builder().build();
+            mAdView.loadAd(adRequest);
+        }
+        
+        // 3. Load Interstitial Ad
+        loadInterstitialAd();
+    }
+    
+    private void loadInterstitialAd() {
+        AdRequest adRequest = new AdRequest.Builder().build();
+        InterstitialAd.load(this, "ca-app-pub-3940256099942544/1033173712", adRequest,
+            new InterstitialAdLoadCallback() {
+                @Override public void onAdLoaded(@NonNull InterstitialAd interstitialAd) { mInterstitialAd = interstitialAd; }
+                @Override public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) { mInterstitialAd = null; }
+            });
+    }
+
+    private void initViews() {
+        authView = findViewById(R.id.authView); mainAppView = findViewById(R.id.mainAppView);
+        pageHome = findViewById(R.id.pageHome); pageCategories = findViewById(R.id.pageCategories);
+        pageRank = findViewById(R.id.pageRank); pageProfile = findViewById(R.id.pageProfile);
+        bottomNav = findViewById(R.id.bottomNav);
+
+        authUser = findViewById(R.id.authUsername); authEmail = findViewById(R.id.authEmail); authPass = findViewById(R.id.authPass);
+        btnAuthSubmit = findViewById(R.id.btnAuthSubmit); btnToggleAuth = findViewById(R.id.btnToggleAuth);
+        tvUserName = findViewById(R.id.tvUserName); tvMainCoins = findViewById(R.id.tvMainCoins);
+        profName = findViewById(R.id.profName); profEmail = findViewById(R.id.profEmail); profCoins = findViewById(R.id.profCoins);
+        imgUserAvatar = findViewById(R.id.imgUserAvatar); imgProfileAvatar = findViewById(R.id.imgProfileAvatar);
+        homeTrophy3D = findViewById(R.id.homeTrophy3D);
+
+        if (homeTrophy3D != null) {
+            Animation pulseAnim = AnimationUtils.loadAnimation(this, R.anim.pulse_anim);
+            homeTrophy3D.startAnimation(pulseAnim);
+        }
+
+        recyclerCategories = findViewById(R.id.recyclerCategories); recyclerCategories.setLayoutManager(new GridLayoutManager(this, 3));
+        recyclerTournamentsFull = findViewById(R.id.recyclerTournamentsFull); recyclerTournamentsFull.setLayoutManager(new LinearLayoutManager(this));
+        recyclerLeaderboardFull = findViewById(R.id.recyclerLeaderboardFull); recyclerLeaderboardFull.setLayoutManager(new LinearLayoutManager(this));
+
+        quizContainer = findViewById(R.id.kbcQuizContainer); quizHeader = findViewById(R.id.quizHeader);
+        tvTimer = findViewById(R.id.tvTimer); quizPointsCurrent = findViewById(R.id.quizPointsCurrent); tvQuestion = findViewById(R.id.tvQuestion);
+        quizTopicBanner = findViewById(R.id.quizTopicBanner); quizTopicIcon = findViewById(R.id.quizTopicIcon); quizTopicName = findViewById(R.id.quizTopicName);
+        btnOpts[0] = findViewById(R.id.btnOpt1); btnOpts[1] = findViewById(R.id.btnOpt2); btnOpts[2] = findViewById(R.id.btnOpt3); btnOpts[3] = findViewById(R.id.btnOpt4);
+    }
+
+    private void setupListeners() {
+        btnToggleAuth.setOnClickListener(v -> {
+            isLoginMode = !isLoginMode; authUser.setVisibility(isLoginMode ? View.GONE : View.VISIBLE);
+            btnAuthSubmit.setText(isLoginMode ? "LOGIN" : "REGISTER"); btnToggleAuth.setText(isLoginMode ? "New User? Register here" : "Already registered? Login");
+        });
+        btnAuthSubmit.setOnClickListener(v -> handleEmailAuth());
+        findViewById(R.id.btnGoogleSignIn).setOnClickListener(v -> {
+            mGoogleSignInClient.signOut().addOnCompleteListener(this, task -> googleSignInLauncher.launch(mGoogleSignInClient.getSignInIntent()));
+        });
+        bottomNav.setOnItemSelectedListener(item -> {
+            pageHome.setVisibility(item.getItemId() == R.id.nav_home ? View.VISIBLE : View.GONE);
+            pageCategories.setVisibility(item.getItemId() == R.id.nav_categories ? View.VISIBLE : View.GONE);
+            pageRank.setVisibility(item.getItemId() == R.id.nav_rank ? View.VISIBLE : View.GONE);
+            pageProfile.setVisibility(item.getItemId() == R.id.nav_profile ? View.VISIBLE : View.GONE);
+            if (item.getItemId() == R.id.nav_rank) loadLeaderboard();
+            return true;
+        });
+        findViewById(R.id.btnProfileLogout).setOnClickListener(v -> logout());
+        findViewById(R.id.btnEarnMoreCoins).setOnClickListener(v -> {
+            if (mRewardedAd != null) { mRewardedAd.show(this, reward -> { addCoins(50, "Video Ad"); Toast.makeText(this, "+50 Coins Claimed!", Toast.LENGTH_SHORT).show(); initAds(); }); } else { addCoins(10, "Free Claim"); Toast.makeText(this, "+10 Free Coins!", Toast.LENGTH_SHORT).show(); }
+        });
+        findViewById(R.id.btnDailyClaim).setOnClickListener(v -> { addCoins(20, "Daily Bonus"); Toast.makeText(this, "+20 Daily Coins Added!", Toast.LENGTH_SHORT).show(); });
+        
+        // Profile features listeners
+        findViewById(R.id.btnEditProfile).setOnClickListener(v -> showEditProfileDialog());
+        findViewById(R.id.menuAchievements).setOnClickListener(v -> showFeatureDialog("🏅 Achievements", "• Quiz Master (Unlocked)\n• Tournament Champ (Unlocked)\n• Streak Legend (5 Days Active)\n• High Roller (500+ Coins Earned)"));
+        findViewById(R.id.menuRewards).setOnClickListener(v -> showFeatureDialog("🎁 Rewards Center", "• Daily Login Bonus: Active (+20 Coins)\n• Spin & Win: Available Every 4 Hours\n• Referral Bonus: +50 Coins per Friend"));
+        findViewById(R.id.menuHistory).setOnClickListener(v -> showFeatureDialog("🕐 Match History", "• Quick Quiz: +40 Points (Won)\n• Tournament Arena: +150 Points (1st Place)\n• Quick Quiz: +10 Points (Completed)"));
+        findViewById(R.id.menuReferEarn).setOnClickListener(v -> showFeatureDialog("👥 Refer & Earn", "Share your invite link with friends!\n\nYour Referral Code: JAVAGOAT2026\n\nEarn 50 coins instantly when your friend joins."));
+
+        findViewById(R.id.btnCloseQuiz).setOnClickListener(v -> endQuiz());
+        for (int i = 0; i < 4; i++) { final int ansIdx = i; btnOpts[i].setOnClickListener(v -> submitAnswer(ansIdx)); }
+    }
+
+    private void showFeatureDialog(String title, String message) {
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setContentView(R.layout.dialog_result);
+        dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        TextView dIcon = dialog.findViewById(R.id.dialogIcon);
+        TextView dTitle = dialog.findViewById(R.id.dialogTitle);
+        TextView dMsg = dialog.findViewById(R.id.dialogMessage);
+        Button dBtn = dialog.findViewById(R.id.dialogBtn);
+        dIcon.setText("🌟"); dTitle.setText(title); dMsg.setText(message);
+        dBtn.setOnClickListener(v -> dialog.dismiss());
+        dialog.show();
+    }
+
+    private void showEditProfileDialog() {
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setContentView(R.layout.dialog_result);
+        dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        
+        LinearLayout container = (LinearLayout) ((ViewGroup) dialog.findViewById(R.id.dialogBtn).getParent());
+        TextView dIcon = dialog.findViewById(R.id.dialogIcon);
+        TextView dTitle = dialog.findViewById(R.id.dialogTitle);
+        TextView dMsg = dialog.findViewById(R.id.dialogMessage);
+        Button dBtn = dialog.findViewById(R.id.dialogBtn);
+
+        dIcon.setText("✏️");
+        dTitle.setText("Edit Profile");
+        dMsg.setVisibility(View.GONE);
+
+        EditText inputName = new EditText(this);
+        inputName.setHint("Enter new username");
+        inputName.setText(userNameStr);
+        inputName.setTextColor(Color.WHITE);
+        inputName.setHintTextColor(Color.parseColor("#A79BC0"));
+        inputName.setBackgroundResource(R.drawable.bg_input);
+        inputName.setPadding(20, 20, 20, 20);
+        
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, 0, 0, 24);
+        inputName.setLayoutParams(params);
+
+        container.addView(inputName, 2);
+
+        dBtn.setText("SAVE CHANGES");
+        dBtn.setOnClickListener(v -> {
+            String newName = inputName.getText().toString().trim();
+            if(!newName.isEmpty() && auth.getUid() != null) {
+                db.child("users").child(auth.getUid()).child("username").setValue(newName);
+                Toast.makeText(this, "Profile updated successfully!", Toast.LENGTH_SHORT).show();
+            }
+            dialog.dismiss();
+        });
+        dialog.show();
+    }
+
+    private void handleEmailAuth() {
+        String e = authEmail.getText().toString().trim(), p = authPass.getText().toString().trim();
+        if (e.isEmpty() || p.isEmpty()) return;
+        if (isLoginMode) {
+            auth.signInWithEmailAndPassword(e, p).addOnSuccessListener(res -> showMainApp()).addOnFailureListener(err -> Toast.makeText(this, err.getMessage(), Toast.LENGTH_SHORT).show());
+        } else {
+            String u = authUser.getText().toString().trim(); if (u.isEmpty()) return;
+            auth.createUserWithEmailAndPassword(e, p).addOnSuccessListener(res -> {
+                db.child("users").child(res.getUser().getUid()).setValue(new User(u, e, "", 100)); showMainApp();
+            }).addOnFailureListener(err -> Toast.makeText(this, err.getMessage(), Toast.LENGTH_SHORT).show());
+        }
+    }
+
+    private void firebaseAuthWithGoogle(String idToken) {
+        AuthCredential credential = GoogleAuthProvider.getCredential(idToken, null);
+        auth.signInWithCredential(credential).addOnSuccessListener(authResult -> {
+            FirebaseUser user = authResult.getUser();
+            if (user != null) {
+                String picUrl = user.getPhotoUrl() != null ? user.getPhotoUrl().toString() : "";
+                db.child("users").child(user.getUid()).addListenerForSingleValueEvent(new ValueEventListener() {
+                    @Override public void onDataChange(@NonNull DataSnapshot s) {
+                        if (!s.exists()) db.child("users").child(user.getUid()).setValue(new User(user.getDisplayName() != null ? user.getDisplayName() : "Player", user.getEmail() != null ? user.getEmail() : "", picUrl, 100));
+                        else if (picUrl.length() > 0) db.child("users").child(user.getUid()).child("photoUrl").setValue(picUrl);
+                        showMainApp();
+                    }
+                    @Override public void onCancelled(@NonNull DatabaseError error) {}
+                });
+            }
+        }).addOnFailureListener(e -> Toast.makeText(this, "Auth Failed: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+    }
+
+    private void logout() { 
+        auth.signOut(); 
+        try {
+            mGoogleSignInClient.signOut();
+        } catch(Exception ignored){}
+        mainAppView.setVisibility(View.GONE);
+        authView.setVisibility(View.VISIBLE);
+        Toast.makeText(this, "Logged out successfully", Toast.LENGTH_SHORT).show();
+    }
+
+    private void showMainApp() {
+        authView.setVisibility(View.GONE); mainAppView.setVisibility(View.VISIBLE);
+        bottomNav.setSelectedItemId(R.id.nav_home);
+        loadUserData(); loadTournaments(); loadLeaderboard();
+    }
+
+    private void loadUserData() {
+        if (auth.getUid() == null) return;
+        db.child("users").child(auth.getUid()).addValueEventListener(new ValueEventListener() {
+            @Override public void onDataChange(@NonNull DataSnapshot s) {
+                if (!s.exists()) return;
+                userNameStr = s.child("username").getValue(String.class);
+                String email = s.child("email").getValue(String.class);
+                String picUrl = s.child("photoUrl").getValue(String.class);
+                Integer pts = s.child("points").getValue(Integer.class);
+                userCoins = pts != null ? pts : 100;
+
+                tvUserName.setText("Hello, " + (userNameStr != null ? userNameStr : "Player") + " 👋"); 
+                tvMainCoins.setText(String.valueOf(userCoins));
+                profName.setText(userNameStr != null ? userNameStr : "Player"); 
+                profEmail.setText(email != null ? email : "");
+                profCoins.setText("🪙 " + userCoins);
+
+                if (picUrl != null && !picUrl.isEmpty() && !isDestroyed()) {
+                    Glide.with(MainActivity.this).load(picUrl).circleCrop().into(imgUserAvatar);
+                    Glide.with(MainActivity.this).load(picUrl).circleCrop().into(imgProfileAvatar);
+                }
+            }
+            @Override public void onCancelled(@NonNull DatabaseError e) {}
+        });
+    }
+
+    private void addCoins(int amount, String desc) { 
+        if(auth.getUid() != null) {
+            db.child("users").child(auth.getUid()).child("points").setValue(userCoins + amount); 
+        }
+    }
+
+    private void loadTournaments() {
+        db.child("tournaments").addValueEventListener(new ValueEventListener() {
+            @Override public void onDataChange(@NonNull DataSnapshot s) {
+                tournamentList.clear();
+                if (s.exists()) {
+                    for (DataSnapshot ds : s.getChildren()) {
+                        Tournament t = ds.getValue(Tournament.class);
+                        if (t != null && t.entry_points > 0) {
+                            t.id = ds.getKey();
+                            t.playedCount = (int) ds.child("players").getChildrenCount();
+                            t.hasPlayed = auth.getUid() != null && ds.child("players").hasChild(auth.getUid());
+                            tournamentList.add(t);
+                        }
+                    }
+                }
+                recyclerTournamentsFull.setAdapter(new TournamentFullAdapter(tournamentList));
+            }
+            @Override public void onCancelled(@NonNull DatabaseError e) {}
+        });
+    }
+
+    private void loadQuickCategoriesFromFirebase() {
+        db.child("quick_categories").addValueEventListener(new ValueEventListener() {
+            @Override public void onDataChange(@NonNull DataSnapshot snap) {
+                quickCategoryList.clear();
+                if (snap.exists()) {
+                    for (DataSnapshot dSnap : snap.getChildren()) {
+                        String title = dSnap.child("title").getValue(String.class);
+                        String icon = dSnap.child("icon").getValue(String.class);
+                        List<QuizQuestion> qList = new ArrayList<>();
+                        DataSnapshot qSnap = dSnap.child("questions");
+                        if (qSnap.exists()) {
+                            for (DataSnapshot qs : qSnap.getChildren()) {
+                                String q = qs.child("q").getValue(String.class);
+                                String o1 = qs.child("opt1").getValue(String.class);
+                                String o2 = qs.child("opt2").getValue(String.class);
+                                String o3 = qs.child("opt3").getValue(String.class);
+                                String o4 = qs.child("opt4").getValue(String.class);
+                                Integer ans = qs.child("ansIdx").getValue(Integer.class);
+                                if(q != null && o1 != null) qList.add(new QuizQuestion(q, o1, o2, o3, o4, ans != null ? ans : 0, 10));
+                            }
+                        }
+                        while(qList.size() < 10) {
+                            qList.add(new QuizQuestion((title != null ? title : "Quiz") + " Question " + (qList.size() + 1) + "?", "Option A", "Option B", "Option C", "Option D", 0, 10));
+                        }
+                        quickCategoryList.add(new QuickCategory(title != null ? title : "General", icon != null && !icon.isEmpty() ? icon : "🧩", qList));
+                    }
+                }
+                if (quickCategoryList.isEmpty()) {
+                    String[] defTitles = {"General", "Science", "History", "Sports", "Politics", "Geography", "Tech", "Math", "Grammar", "Religion"};
+                    String[] defIcons = {"🧩", "🧪", "📜", "⚽", "🏛️", "🌍", "💻", "➗", "📝", "🕌"};
+                    for (int i = 0; i < defTitles.length; i++) {
+                        List<QuizQuestion> qList = new ArrayList<>();
+                        for (int j = 0; j < 10; j++) qList.add(new QuizQuestion(defTitles[i] + " Question " + (j + 1) + "?", "Opt A", "Opt B", "Opt C", "Opt D", 0, 10));
+                        quickCategoryList.add(new QuickCategory(defTitles[i], defIcons[i], qList));
+                    }
+                }
+                recyclerCategories.setAdapter(new QuickCategoryAdapter(quickCategoryList));
+            }
+            @Override public void onCancelled(@NonNull DatabaseError error) {}
+        });
+    }
+
+    private void loadLeaderboard() {
+        db.child("users").orderByChild("points").limitToLast(50).addValueEventListener(new ValueEventListener() {
+            @Override public void onDataChange(@NonNull DataSnapshot s) {
+                leaderboardList.clear();
+                for (DataSnapshot ds : s.getChildren()) { User u = ds.getValue(User.class); if (u != null) leaderboardList.add(0, u); }
+                recyclerLeaderboardFull.setAdapter(new LeaderboardAdapter(leaderboardList));
+            }
+            @Override public void onCancelled(@NonNull DatabaseError e) {}
+        });
+    }
+
+    private void startQuiz(Tournament t) {
+        if (t.hasPlayed) { Toast.makeText(this, "You already completed this pool!", Toast.LENGTH_SHORT).show(); return; }
+        if (t.pool_size > 0 && t.playedCount >= t.pool_size) { Toast.makeText(this, "This pool is full!", Toast.LENGTH_SHORT).show(); return; }
+        if (t.entry_points > userCoins) { Toast.makeText(this, "Not enough coins to join pool!", Toast.LENGTH_SHORT).show(); return; }
+
+        activeTournament = t; activeQuickCategory = null;
+        addCoins(-t.entry_points, "Tournament Entry Fee");
+        Toast.makeText(this, "Deducted " + t.entry_points + " Entry Coins", Toast.LENGTH_SHORT).show();
+        currentQuizQuestions.clear();
+
+        if (t.id != null) {
+            db.child("tournaments").child(t.id).child("questions").addListenerForSingleValueEvent(new ValueEventListener() {
+                @Override public void onDataChange(@NonNull DataSnapshot snap) {
+                    if (snap.exists()) {
+                        for (DataSnapshot qSnap : snap.getChildren()) {
+                            String q = qSnap.child("q").getValue(String.class);
+                            String o1 = qSnap.child("opt1").getValue(String.class); String o2 = qSnap.child("opt2").getValue(String.class);
+                            String o3 = qSnap.child("opt3").getValue(String.class); String o4 = qSnap.child("opt4").getValue(String.class);
+                            Integer ans = qSnap.child("ansIdx").getValue(Integer.class);
+                            Integer pts = qSnap.child("points").getValue(Integer.class);
+                            if (q != null && o1 != null) currentQuizQuestions.add(new QuizQuestion(q, o1, o2, o3, o4, ans != null ? ans : 0, pts != null ? pts : 50));
+                        }
+                    }
+                    if(currentQuizQuestions.isEmpty()) currentQuizQuestions.add(new QuizQuestion("Tournament Question 1?", "A", "B", "C", "D", 0, 50));
+                    launchQuizUI();
+                }
+                @Override public void onCancelled(@NonNull DatabaseError error) { launchQuizUI(); }
+            });
+        }
+    }
+
+    private void startQuickQuiz(QuickCategory qc) {
+        activeTournament = null; activeQuickCategory = qc;
+        currentQuizQuestions.clear();
+        currentQuizQuestions.addAll(qc.questions);
+        launchQuizUI();
+    }
+
+    private void launchQuizUI() {
+        quizContainer.setVisibility(View.VISIBLE);
+        currentQIndex = 0; coinsEarnedInQuiz = 0; correctAnswersCount = 0;
+        if (activeQuickCategory != null) {
+            quizTopicIcon.setText(activeQuickCategory.icon);
+            quizTopicName.setText(activeQuickCategory.title);
+            quizTopicBanner.setVisibility(View.VISIBLE);
+        } else {
+            quizTopicBanner.setVisibility(View.GONE);
+        }
+        loadNextQuestion();
+    }
+
+    private void loadNextQuestion() {
+        if (currentQIndex >= currentQuizQuestions.size()) { endQuiz(); return; }
+        if (countDownTimer != null) countDownTimer.cancel();
+        for (Button b : btnOpts) {
+            b.setBackgroundResource(R.drawable.bg_option_btn);
+            b.setTextColor(ContextCompat.getColor(this, R.color.text_primary));
+            b.setEnabled(true);
+        }
+        QuizQuestion q = currentQuizQuestions.get(currentQIndex);
+        quizHeader.setText("Question " + (currentQIndex + 1) + "/" + currentQuizQuestions.size());
+        quizPointsCurrent.setText(activeTournament == null ? ("Winning: " + coinsEarnedInQuiz + " Coins") : "🏆 Tournament Match Live");
+        tvQuestion.setText(q.q);
+        btnOpts[0].setText("A. " + q.opts[0]); btnOpts[1].setText("B. " + q.opts[1]);
+        btnOpts[2].setText("C. " + q.opts[2]); btnOpts[3].setText("D. " + q.opts[3]);
+        countDownTimer = new CountDownTimer(15000, 1000) {
+            public void onTick(long millis) { tvTimer.setText("⏳ " + (millis / 1000) + "s"); }
+            public void onFinish() { submitAnswer(-1); }
+        }.start();
+    }
+
+    private void setOptionColor(Button btn, int bgColor, int strokeColor, int textColor) {
+        GradientDrawable gd = new GradientDrawable();
+        gd.setColor(bgColor);
+        gd.setCornerRadius(48f);
+        gd.setStroke(4, strokeColor);
+        btn.setBackground(gd);
+        btn.setTextColor(textColor);
+    }
+
+    private void submitAnswer(int idx) {
+        if (countDownTimer != null) countDownTimer.cancel();
+        for (Button b : btnOpts) b.setEnabled(false);
+        QuizQuestion q = currentQuizQuestions.get(currentQIndex);
+        if (idx == q.ansIdx) {
+            if (idx >= 0) setOptionColor(btnOpts[idx], 0xFF27AE60, 0xFF2ECC71, 0xFFFFFFFF);
+            correctAnswersCount++;
+            if (activeTournament == null) coinsEarnedInQuiz += q.points;
+        } else {
+            if (idx >= 0) setOptionColor(btnOpts[idx], 0xFFB83232, 0xFFE74C3C, 0xFFFFFFFF);
+            setOptionColor(btnOpts[q.ansIdx], 0xFF27AE60, 0xFF2ECC71, 0xFFFFFFFF);
+        }
+        new Handler().postDelayed(() -> { currentQIndex++; loadNextQuestion(); }, 1500);
+    }
+
+    private void showResultDialog(String title, String message, String emoji) {
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setContentView(R.layout.dialog_result);
+        dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        dialog.setCancelable(false);
+        TextView dIcon = dialog.findViewById(R.id.dialogIcon);
+        TextView dTitle = dialog.findViewById(R.id.dialogTitle);
+        TextView dMsg = dialog.findViewById(R.id.dialogMessage);
+        Button dBtn = dialog.findViewById(R.id.dialogBtn);
+        dIcon.setText(emoji); dTitle.setText(title); dMsg.setText(message);
+        dBtn.setOnClickListener(v -> dialog.dismiss());
+        dialog.show();
+    }
+
+    private void endQuiz() {
+        if (countDownTimer != null) countDownTimer.cancel();
+        quizContainer.setVisibility(View.GONE);
+        
+        // --- Show Interstitial Ad When Quiz Ends ---
+        if (mInterstitialAd != null) {
+            mInterstitialAd.show(this);
+            loadInterstitialAd(); // Load the next one in the background
+        }
+        
+        int totalQ = currentQuizQuestions.size();
+        if (activeTournament != null) {
+            if(auth.getUid() != null) {
+                db.child("tournaments").child(activeTournament.id).child("players").child(auth.getUid()).setValue(correctAnswersCount);
+            }
+            float winRatio = (float) correctAnswersCount / totalQ;
+            int totalPool = (activeTournament.pool_size > 0) ? (activeTournament.pool_size * activeTournament.entry_points) : activeTournament.reward_points;
+            int prize = 0; String rank = "";
+            if (winRatio == 1.0f) { prize = (int) (totalPool * 0.5); rank = "1st Place"; }
+            else if (winRatio >= 0.75f) { prize = (int) (totalPool * 0.3); rank = "2nd Place"; }
+            else if (winRatio >= 0.5f) { prize = (int) (totalPool * 0.2); rank = "3rd Place"; }
+            if (prize > 0) {
+                addCoins(prize, "Tournament Prize");
+                showResultDialog(rank + " Winner!", "You scored " + correctAnswersCount + "/" + totalQ + "!\n\nYou won " + prize + " Coins from the pool!", "🏆");
+            } else {
+                showResultDialog("Match Finished", "You scored " + correctAnswersCount + "/" + totalQ + ".\n\nBetter luck next time!", "💔");
+            }
+        } else {
+            if (coinsEarnedInQuiz > 0) {
+                addCoins(coinsEarnedInQuiz, "Quick Quiz Reward");
+                showResultDialog("Good Game!", "You scored " + correctAnswersCount + "/" + totalQ + ".\nEarned " + coinsEarnedInQuiz + " Points!", "🎉");
+            } else {
+                showResultDialog("Game Over", "You scored " + correctAnswersCount + "/" + totalQ + ".\nPractice more!", "📚");
+            }
+        }
+    }
+
+    class QuickCategoryAdapter extends RecyclerView.Adapter<QuickCategoryAdapter.VH> {
+        List<QuickCategory> list; QuickCategoryAdapter(List<QuickCategory> l) { list = l; }
+        @NonNull @Override public VH onCreateViewHolder(@NonNull ViewGroup p, int t) { return new VH(LayoutInflater.from(p.getContext()).inflate(R.layout.item_category, p, false)); }
+        @Override public void onBindViewHolder(@NonNull VH h, int pos) {
+            QuickCategory qc = list.get(pos);
+            h.tTitle.setText(qc.title);
+            h.tIcon.setText(qc.icon != null && !qc.icon.isEmpty() ? qc.icon : "🧩");
+            final int[] tiles = {R.drawable.bg_tile_purple, R.drawable.bg_tile_blue, R.drawable.bg_tile_gold, R.drawable.bg_tile_red};
+            h.bg.setBackgroundResource(tiles[pos % tiles.length]);
+            h.itemView.setOnClickListener(v -> startQuickQuiz(qc));
+        }
+        @Override public int getItemCount() { return list.size(); }
+        class VH extends RecyclerView.ViewHolder { TextView tTitle, tIcon; View bg; VH(View v) { super(v); tTitle = v.findViewById(R.id.catTitle); tIcon = v.findViewById(R.id.catIcon); bg = v.findViewById(R.id.cardCategoryBg); } }
+    }
+
+    class TournamentFullAdapter extends RecyclerView.Adapter<TournamentFullAdapter.VH> {
+        List<Tournament> list; TournamentFullAdapter(List<Tournament> l) { list = l; }
+        @NonNull @Override public VH onCreateViewHolder(@NonNull ViewGroup p, int t) { return new VH(LayoutInflater.from(p.getContext()).inflate(R.layout.item_tournament, p, false)); }
+        @Override public void onBindViewHolder(@NonNull VH h, int pos) {
+            Tournament t = list.get(pos); h.tTitle.setText(t.title);
+            h.tDetails.setText("Entry: " + t.entry_points + " 🪙 | Players: " + t.playedCount + (t.pool_size > 0 ? ("/" + t.pool_size) : ""));
+            
+            // 3D Realistic Golden Cup pulse animation
+            Animation pulse = AnimationUtils.loadAnimation(h.itemView.getContext(), R.anim.pulse_anim);
+            h.tCupImage.startAnimation(pulse);
+
+            if (t.hasPlayed) {
+                h.btnPlay.setText("PLAYED"); h.btnPlay.setEnabled(false); h.btnPlay.setBackgroundColor(0xFF3B2A5E); h.btnPlay.setTextColor(0xFF7A6B99);
+            } else if (t.pool_size > 0 && t.playedCount >= t.pool_size) {
+                h.btnPlay.setText("FULL"); h.btnPlay.setEnabled(false); h.btnPlay.setBackgroundColor(0xFF3B2A5E); h.btnPlay.setTextColor(0xFF7A6B99);
+            } else {
+                h.btnPlay.setText("JOIN"); h.btnPlay.setEnabled(true); h.btnPlay.setBackgroundResource(R.drawable.bg_btn_gold); h.btnPlay.setTextColor(0xFF2A1B00);
+            }
+            h.btnPlay.setOnClickListener(v -> startQuiz(t));
+        }
+        @Override public int getItemCount() { return list.size(); }
+        class VH extends RecyclerView.ViewHolder { TextView tTitle, tDetails; ImageView tCupImage; Button btnPlay; VH(View v) { super(v); tTitle = v.findViewById(R.id.tTitle); tDetails = v.findViewById(R.id.tDetails); tCupImage = v.findViewById(R.id.tCupImage); btnPlay = v.findViewById(R.id.btnPlayTournament); } }
+    }
+
+    class LeaderboardAdapter extends RecyclerView.Adapter<LeaderboardAdapter.VH> {
+        List<User> list; LeaderboardAdapter(List<User> l) { list = l; }
+        @NonNull @Override public VH onCreateViewHolder(@NonNull ViewGroup p, int t) { return new VH(LayoutInflater.from(p.getContext()).inflate(R.layout.item_leaderboard, p, false)); }
+        @Override public void onBindViewHolder(@NonNull VH h, int pos) {
+            User u = list.get(pos);
+            h.lbRank.setText("#" + (pos + 1));
+            if (pos == 0) h.lbRank.setTextColor(0xFFFFC93C);
+            else if (pos == 1) h.lbRank.setTextColor(0xFFC0C0C0);
+            else if (pos == 2) h.lbRank.setTextColor(0xFFCD7F32);
+            else h.lbRank.setTextColor(0xFFA79BC0);
+            h.lbName.setText(u.username != null ? u.username : "Player");
+            h.lbScore.setText("🪙 " + u.points);
+        }
+        @Override public int getItemCount() { return list.size(); }
+        class VH extends RecyclerView.ViewHolder { TextView lbRank, lbName, lbScore; VH(View v) { super(v); lbRank = v.findViewById(R.id.lbRank); lbName = v.findViewById(R.id.lbName); lbScore = v.findViewById(R.id.lbScore); } }
+    }
+
+    public static class User { public String username, email, photoUrl; public int points; public User(){} public User(String u, String e, String pic, int p){username=u; email=e; photoUrl=pic; points=p;} }
+    public static class Tournament { public String id, title, status, icon; public int entry_points, reward_points, pool_size, playedCount; public boolean hasPlayed; public Tournament(){} }
+    class QuizQuestion { String q; String[] opts = new String[4]; int ansIdx, points; QuizQuestion(String qu, String a, String b, String c, String d, int ans, int pts){ q=qu; opts[0]=a; opts[1]=b; opts[2]=c; opts[3]=d; ansIdx=ans; points=pts; } }
+    class QuickCategory { String title, icon; List<QuizQuestion> questions; QuickCategory(String t, String i, List<QuizQuestion> q){title=t; icon=i; questions=q;} }
+}
+EOF
+
+# ============================================================
+# 9. GRADLE WRAPPER INITIALIZATION & BUILD
+# ============================================================
+echo "==> [10/10] Initializing Gradle wrapper and Building Release APK and AAB..."
+cd "$PROJECT_DIR"
+gradle wrapper --gradle-version 8.2 > /dev/null
+chmod +x gradlew
+# UPDATED: Added bundleRelease to create the .aab file Google Play requires
+./gradlew clean assembleRelease bundleRelease
+
+echo ""
+echo "=========================================================================="
+echo "                     🏆 ROYAL BUILD SUCCESS! 🏆                          "
+echo "=========================================================================="
+echo " APK (Local testing): app/build/outputs/apk/release/app-release.apk"
+echo " AAB (UPLOAD THIS TO GOOGLE PLAY): app/build/outputs/bundle/release/app-release.aab"
+echo "=========================================================================="
