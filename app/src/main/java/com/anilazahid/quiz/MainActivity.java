@@ -489,13 +489,16 @@ public class MainActivity extends AppCompatActivity {
         if (countDownTimer != null) countDownTimer.cancel();
         for (Button b : btnOpts) b.setEnabled(false);
         QuizQuestion q = currentQuizQuestions.get(currentQIndex);
+        if (idx >= 0) {
+            setOptionColor(btnOpts[idx], R.color.quiz_option_selected, R.color.gold, R.color.gold_text_dark);
+        }
         if (idx == q.ansIdx) {
-            if (idx >= 0) setOptionColor(btnOpts[idx], 0xFF27AE60, 0xFF2ECC71, 0xFFFFFFFF);
+            if (idx >= 0) setOptionColor(btnOpts[idx], R.color.correct_answer, R.color.correct_answer, R.color.text_primary);
             correctAnswersCount++;
             if (activeTournament == null) coinsEarnedInQuiz += q.points;
         } else {
-            if (idx >= 0) setOptionColor(btnOpts[idx], 0xFFB83232, 0xFFE74C3C, 0xFFFFFFFF);
-            setOptionColor(btnOpts[q.ansIdx], 0xFF27AE60, 0xFF2ECC71, 0xFFFFFFFF);
+            if (idx >= 0) setOptionColor(btnOpts[idx], R.color.wrong_answer, R.color.wrong_answer, R.color.text_primary);
+            setOptionColor(btnOpts[q.ansIdx], R.color.correct_answer, R.color.correct_answer, R.color.text_primary);
         }
         new Handler().postDelayed(() -> { currentQIndex++; loadNextQuestion(); }, 1500);
     }

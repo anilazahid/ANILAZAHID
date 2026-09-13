@@ -1,14 +1,18 @@
 <resources>
-    <color name="bg_app">#150A2E</color>
-    <color name="surface">#1E0F38</color>
-    <color name="card">#251243</color>
-    <color name="card_border">#3B2A5E</color>
-    <color name="gold">#FFC93C</color>
+    <color name="primary_purple">#6C2BD9</color>
+    <color name="bg_app">#1A0B3D</color>
+    <color name="surface">#1A0B3D</color>
+    <color name="card">#2A1B4D</color>
+    <color name="card_border">#6C2BD9</color>
+    <color name="gold">#FFD700</color>
     <color name="gold_deep">#F5A623</color>
     <color name="gold_text_dark">#2A1B00</color>
     <color name="text_primary">#FFFFFF</color>
     <color name="text_secondary">#A79BC0</color>
     <color name="muted_nav">#7A6B99</color>
-    <color name="green">#2ECC71</color>
-    <color name="error">#FF5A5F</color>
+    <color name="green">#22C55E</color>
+    <color name="error">#EF4444</color>
+    <color name="quiz_option_selected">#FFD700</color>
+    <color name="correct_answer">#22C55E</color>
+    <color name="wrong_answer">#EF4444</color>
 </resources>
