@@ -282,11 +282,12 @@ public class MainActivity extends AppCompatActivity {
         }).addOnFailureListener(e -> Toast.makeText(this, "Auth Failed: " + e.getMessage(), Toast.LENGTH_SHORT).show());
     }
 
-    private void logout() { 
-        auth.signOut(); 
-        try {
-            mGoogleSignInClient.signOut();
-        } catch(Exception ignored){}
+    private void logout() {
+        auth.signOut();
+        mGoogleSignInClient.signOut().addOnCompleteListener(this, task -> returnToLogin());
+    }
+
+    private void returnToLogin() {
         mainAppView.setVisibility(View.GONE);
         authView.setVisibility(View.VISIBLE);
         Toast.makeText(this, "Logged out successfully", Toast.LENGTH_SHORT).show();
