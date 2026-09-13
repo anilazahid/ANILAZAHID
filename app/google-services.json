@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "1034413499679",
+    "firebase_url": "https://quiz-with-anila-zahid-default-rtdb.firebaseio.com",
+    "project_id": "quiz-with-anila-zahid",
+    "storage_bucket": "quiz-with-anila-zahid.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1034413499679:android:eda82193ba8bed7d2c3c2a",
+        "android_client_info": {
+          "package_name": "com.anilazahid.quiz"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1034413499679-e1caitmgcfncr7q6pkar4hk5l0uuormf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.anilazahid.quiz",
+            "certificate_hash": "fbb390109c35d45ec8f43d43aae23271a58b891a"
+          }
+        },
+        {
+          "client_id": "1034413499679-3gl74pqe3a12lov1ap68s3jql06gqo1m.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAtzmHTVVqqmB4AuX-iYI9Y-bZq-fh_hbk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1034413499679-3gl74pqe3a12lov1ap68s3jql06gqo1m.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,12 @@
+.gradle/
+build/
+app/build/
+build-tools/
+platform-tools/
+platforms/
+licenses/
+.knownPackages
+local.properties
+my-release-key.jks
+*.iml
+.idea/

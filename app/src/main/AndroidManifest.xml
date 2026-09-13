@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
+    <application android:label="Quiz With Anila Zahid" android:icon="@drawable/ic_launcher" android:theme="@style/Theme.JavaGoat">
+        <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713"/>
+        <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustPan">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".AdminLoginActivity" android:exported="false" />
+        <activity android:name=".AdminDashboardActivity" android:exported="false" />
+        <activity android:name=".AdminUsersActivity" android:exported="false" />
+        <activity android:name=".AdminCategoriesActivity" android:exported="false" />
+        <activity android:name=".AdminQuestionsActivity" android:exported="false" />
+        <activity android:name=".AdminResultsActivity" android:exported="false" />
+        <activity android:name=".AdminSettingsActivity" android:exported="false" />
+    </application>
+</manifest>

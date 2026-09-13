@@ -1,0 +1,41 @@
+{
+  "rules": {
+    "admin_users": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid == $uid || root.child('admin_users').child(auth.uid).val() == true)",
+        ".write": false
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid == $uid || root.child('admin_users').child(auth.uid).val() == true)",
+        ".write": "auth != null && (auth.uid == $uid || root.child('admin_users').child(auth.uid).val() == true)"
+      }
+    },
+    "quick_categories": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('admin_users').child(auth.uid).val() == true"
+    },
+    "quiz_results": {
+      "$resultId": {
+        ".read": "auth != null && root.child('admin_users').child(auth.uid).val() == true",
+        ".write": "auth != null && ((!data.exists() && newData.child('userId').val() == auth.uid) || root.child('admin_users').child(auth.uid).val() == true)"
+      }
+    },
+    "admin_settings": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('admin_users').child(auth.uid).val() == true"
+    },
+    "tournaments": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('admin_users').child(auth.uid).val() == true",
+      "$tournamentId": {
+        "players": {
+          "$uid": {
+            ".write": "auth != null && auth.uid == $uid"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/nav_home" android:title="Dashboard" android:icon="@drawable/ic_nav_home"/>
+    <item android:id="@+id/nav_categories" android:title="Tournament" android:icon="@drawable/ic_nav_trophy"/>
+    <item android:id="@+id/nav_rank" android:title="Leaderboard" android:icon="@drawable/ic_nav_chart"/>
+    <item android:id="@+id/nav_profile" android:title="Profile" android:icon="@drawable/ic_nav_profile"/>
+</menu>

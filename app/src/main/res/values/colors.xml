@@ -1,0 +1,14 @@
+<resources>
+    <color name="bg_app">#150A2E</color>
+    <color name="surface">#1E0F38</color>
+    <color name="card">#251243</color>
+    <color name="card_border">#3B2A5E</color>
+    <color name="gold">#FFC93C</color>
+    <color name="gold_deep">#F5A623</color>
+    <color name="gold_text_dark">#2A1B00</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#A79BC0</color>
+    <color name="muted_nav">#7A6B99</color>
+    <color name="green">#2ECC71</color>
+    <color name="error">#FF5A5F</color>
+</resources>

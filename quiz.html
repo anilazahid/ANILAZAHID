@@ -1325,13 +1325,13 @@ public class MainActivity extends AppCompatActivity {
 }
 EOF
 
-# ============================================================
 # 9. GRADLE WRAPPER INITIALIZATION & BUILD
 # ============================================================
 echo "==> [10/10] Initializing Gradle wrapper and Building Release APK and AAB..."
 cd "$PROJECT_DIR"
 gradle wrapper --gradle-version 8.2 > /dev/null
-chmod +x gradlew
+chmod +x gradlew# ============================================================
+
 # UPDATED: Added bundleRelease to create the .aab file Google Play requires
 ./gradlew clean assembleRelease bundleRelease
 
