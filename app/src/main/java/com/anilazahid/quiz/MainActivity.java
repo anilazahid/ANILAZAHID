@@ -49,7 +49,8 @@ public class MainActivity extends AppCompatActivity {
     private View authView, mainAppView, pageHome, pageCategories, pageRank, pageProfile;
     private EditText authUser, authEmail, authPass;
     private Button btnAuthSubmit;
-    private TextView btnToggleAuth, tvUserName, tvMainCoins, profName, profEmail, profCoins;
+    private TextView btnToggleAuth, tvUserName, tvMainCoins, profName, profEmail, profCoins, dailyRewardStatus;
+    private Button dailyRewardClaim;
     private ImageView imgUserAvatar, imgProfileAvatar, homeTrophy3D;
     private BottomNavigationView bottomNav;
     private RecyclerView recyclerCategories, recyclerTournamentsFull, recyclerLeaderboardFull;
@@ -73,6 +74,7 @@ public class MainActivity extends AppCompatActivity {
     private Tournament activeTournament = null;
     private QuickCategory activeQuickCategory = null;
     private List<QuizQuestion> currentQuizQuestions = new ArrayList<>();
+    private boolean dailyRewardClaimed;
 
     private final ActivityResultLauncher<Intent> googleSignInLauncher = registerForActivityResult(
         new ActivityResultContracts.StartActivityForResult(),
@@ -142,6 +144,7 @@ public class MainActivity extends AppCompatActivity {
         btnAuthSubmit = findViewById(R.id.btnAuthSubmit); btnToggleAuth = findViewById(R.id.btnToggleAuth);
         tvUserName = findViewById(R.id.tvUserName); tvMainCoins = findViewById(R.id.tvMainCoins);
         profName = findViewById(R.id.profName); profEmail = findViewById(R.id.profEmail); profCoins = findViewById(R.id.profCoins);
+        dailyRewardStatus = findViewById(R.id.dailyRewardStatus); dailyRewardClaim = findViewById(R.id.dailyRewardClaim);
         imgUserAvatar = findViewById(R.id.imgUserAvatar); imgProfileAvatar = findViewById(R.id.imgProfileAvatar);
         homeTrophy3D = findViewById(R.id.homeTrophy3D);
 
@@ -182,7 +185,8 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.btnEarnMoreCoins).setOnClickListener(v -> {
             if (mRewardedAd != null) { mRewardedAd.show(this, reward -> { addCoins(50, "Video Ad"); Toast.makeText(this, "+50 Coins Claimed!", Toast.LENGTH_SHORT).show(); initAds(); }); } else { addCoins(10, "Free Claim"); Toast.makeText(this, "+10 Free Coins!", Toast.LENGTH_SHORT).show(); }
         });
-        findViewById(R.id.btnDailyClaim).setOnClickListener(v -> { addCoins(20, "Daily Bonus"); Toast.makeText(this, "+20 Daily Coins Added!", Toast.LENGTH_SHORT).show(); });
+        findViewById(R.id.btnDailyClaim).setOnClickListener(v -> claimDailyReward());
+        if (dailyRewardClaim != null) dailyRewardClaim.setOnClickListener(v -> claimDailyReward());
         
         // Profile features listeners
         findViewById(R.id.btnEditProfile).setOnClickListener(v -> showEditProfileDialog());
@@ -309,6 +313,7 @@ public class MainActivity extends AppCompatActivity {
                 String picUrl = s.child("photoUrl").getValue(String.class);
                 Integer pts = s.child("points").getValue(Integer.class);
                 userCoins = pts != null ? pts : 100;
+                updateDailyRewardState(s.child("dailyRewardDate").getValue(String.class));
 
                 tvUserName.setText("Hello, " + (userNameStr != null ? userNameStr : "Player") + " 👋"); 
                 tvMainCoins.setText(String.valueOf(userCoins));
@@ -329,6 +334,56 @@ public class MainActivity extends AppCompatActivity {
         if(auth.getUid() != null) {
             db.child("users").child(auth.getUid()).child("points").setValue(userCoins + amount); 
         }
+    }
+
+    private String todayKey() {
+        return new java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date());
+    }
+
+    private void updateDailyRewardState(String claimedDate) {
+        dailyRewardClaimed = todayKey().equals(claimedDate);
+        String label = dailyRewardClaimed ? "CLAIMED TODAY" : "CLAIM DAILY REWARD (+20)";
+        if (dailyRewardStatus != null) dailyRewardStatus.setText(dailyRewardClaimed ? "Daily reward claimed. Come back tomorrow." : "Claim 20 coins once every day.");
+        if (dailyRewardClaim != null) {
+            dailyRewardClaim.setText(label);
+            dailyRewardClaim.setEnabled(!dailyRewardClaimed);
+            dailyRewardClaim.setBackgroundResource(dailyRewardClaimed ? R.drawable.bg_card : R.drawable.bg_btn_gold);
+        }
+        Button profileClaim = findViewById(R.id.btnDailyClaim);
+        profileClaim.setText(label);
+        profileClaim.setEnabled(!dailyRewardClaimed);
+    }
+
+    private void claimDailyReward() {
+        if (auth.getUid() == null || dailyRewardClaimed) {
+            Toast.makeText(this, "Daily reward already claimed today.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String today = todayKey();
+        DatabaseReference rewardDate = db.child("users").child(auth.getUid()).child("dailyRewardDate");
+        rewardDate.runTransaction(new Transaction.Handler() {
+            @NonNull @Override public Transaction.Result doTransaction(MutableData currentData) {
+                if (today.equals(currentData.getValue(String.class))) return Transaction.abort();
+                currentData.setValue(today);
+                return Transaction.success(currentData);
+            }
+            @Override public void onComplete(DatabaseError error, boolean committed, DataSnapshot snapshot) {
+                if (error != null || !committed) {
+                    if (!committed) {
+                        dailyRewardClaimed = true;
+                        updateDailyRewardState(today);
+                        Toast.makeText(MainActivity.this, "Daily reward already claimed today.", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(MainActivity.this, "Could not claim daily reward. Try again.", Toast.LENGTH_SHORT).show();
+                    }
+                    return;
+                }
+                dailyRewardClaimed = true;
+                addCoins(QuizBank.DAILY_REWARD_COINS, "Daily Bonus");
+                updateDailyRewardState(today);
+                Toast.makeText(MainActivity.this, "+20 Daily Coins Added!", Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     private void loadTournaments() {
@@ -356,10 +411,13 @@ public class MainActivity extends AppCompatActivity {
         db.child("quick_categories").addValueEventListener(new ValueEventListener() {
             @Override public void onDataChange(@NonNull DataSnapshot snap) {
                 quickCategoryList.clear();
+                List<QuizBank.StarterCategory> starterCategories = QuizBank.categories();
+                Set<String> existingTitles = new HashSet<>();
                 if (snap.exists()) {
                     for (DataSnapshot dSnap : snap.getChildren()) {
                         String title = dSnap.child("title").getValue(String.class);
                         String icon = dSnap.child("icon").getValue(String.class);
+                        existingTitles.add(title != null ? title : "");
                         List<QuizQuestion> qList = new ArrayList<>();
                         DataSnapshot qSnap = dSnap.child("questions");
                         if (qSnap.exists()) {
@@ -370,28 +428,71 @@ public class MainActivity extends AppCompatActivity {
                                 String o3 = qs.child("opt3").getValue(String.class);
                                 String o4 = qs.child("opt4").getValue(String.class);
                                 Integer ans = qs.child("ansIdx").getValue(Integer.class);
-                                if(q != null && o1 != null) qList.add(new QuizQuestion(q, o1, o2, o3, o4, ans != null ? ans : 0, 10));
+                                if (ans == null) ans = answerIndex(qs.child("correctAnswer").getValue(String.class));
+                                if(q != null && o1 != null && o2 != null && o3 != null && o4 != null) qList.add(new QuizQuestion(q, o1, o2, o3, o4, ans != null ? ans : 0, 10));
                             }
                         }
-                        while(qList.size() < 10) {
-                            qList.add(new QuizQuestion((title != null ? title : "Quiz") + " Question " + (qList.size() + 1) + "?", "Option A", "Option B", "Option C", "Option D", 0, 10));
+                        QuizBank.StarterCategory matchingStarter = findStarterCategory(starterCategories, title);
+                        if (qList.isEmpty() && matchingStarter != null) {
+                            qList.addAll(starterQuestions(matchingStarter));
+                            seedQuestions(dSnap.getKey(), matchingStarter);
                         }
+                        while (qList.size() < 10) qList.add(new QuizQuestion((title != null ? title : "Quiz") + " Question " + (qList.size() + 1) + "?", "Option A", "Option B", "Option C", "Option D", 0, 10));
                         quickCategoryList.add(new QuickCategory(title != null ? title : "General", icon != null && !icon.isEmpty() ? icon : "🧩", qList));
                     }
                 }
-                if (quickCategoryList.isEmpty()) {
-                    String[] defTitles = {"General", "Science", "History", "Sports", "Politics", "Geography", "Tech", "Math", "Grammar", "Religion"};
-                    String[] defIcons = {"🧩", "🧪", "📜", "⚽", "🏛️", "🌍", "💻", "➗", "📝", "🕌"};
-                    for (int i = 0; i < defTitles.length; i++) {
-                        List<QuizQuestion> qList = new ArrayList<>();
-                        for (int j = 0; j < 10; j++) qList.add(new QuizQuestion(defTitles[i] + " Question " + (j + 1) + "?", "Opt A", "Opt B", "Opt C", "Opt D", 0, 10));
-                        quickCategoryList.add(new QuickCategory(defTitles[i], defIcons[i], qList));
+                List<QuizBank.StarterCategory> missing = new ArrayList<>();
+                for (QuizBank.StarterCategory starter : starterCategories) {
+                    if (!existingTitles.contains(starter.title)) {
+                        quickCategoryList.add(new QuickCategory(starter.title, starter.icon, starterQuestions(starter)));
+                        missing.add(starter);
                     }
                 }
+                if (!missing.isEmpty()) seedStarterCategories(missing);
                 recyclerCategories.setAdapter(new QuickCategoryAdapter(quickCategoryList));
             }
             @Override public void onCancelled(@NonNull DatabaseError error) {}
         });
+    }
+
+    private int answerIndex(String answer) {
+        if (answer == null || answer.isEmpty()) return 0;
+        return Math.max(0, Math.min(3, Character.toUpperCase(answer.charAt(0)) - 'A'));
+    }
+
+    private QuizBank.StarterCategory findStarterCategory(List<QuizBank.StarterCategory> categories, String title) {
+        if (title == null) return null;
+        for (QuizBank.StarterCategory category : categories) if (category.title.equals(title)) return category;
+        return null;
+    }
+
+    private List<QuizQuestion> starterQuestions(QuizBank.StarterCategory category) {
+        List<QuizQuestion> questions = new ArrayList<>();
+        for (String[] item : category.questions) questions.add(new QuizQuestion(item[0], item[1], item[2], item[3], item[4], Integer.parseInt(item[5]), 10));
+        return questions;
+    }
+
+    private Map<String, Object> starterQuestionData(String[] item) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("q", item[0]); data.put("opt1", item[1]); data.put("opt2", item[2]);
+        data.put("opt3", item[3]); data.put("opt4", item[4]); data.put("ansIdx", Integer.parseInt(item[5]));
+        data.put("correctAnswer", String.valueOf((char) ('A' + Integer.parseInt(item[5])))); data.put("points", 10);
+        return data;
+    }
+
+    private void seedQuestions(String categoryKey, QuizBank.StarterCategory category) {
+        if (categoryKey == null) return;
+        for (String[] item : category.questions) db.child("quick_categories").child(categoryKey).child("questions").push().setValue(starterQuestionData(item));
+    }
+
+    private void seedStarterCategories(List<QuizBank.StarterCategory> categories) {
+        for (QuizBank.StarterCategory category : categories) {
+            DatabaseReference ref = db.child("quick_categories").push();
+            Map<String, Object> data = new HashMap<>(); data.put("title", category.title); data.put("icon", category.icon);
+            Map<String, Object> questions = new HashMap<>();
+            for (String[] item : category.questions) questions.put(ref.push().getKey(), starterQuestionData(item));
+            data.put("questions", questions); ref.setValue(data);
+        }
     }
 
     private void loadLeaderboard() {
@@ -440,6 +541,7 @@ public class MainActivity extends AppCompatActivity {
         activeTournament = null; activeQuickCategory = qc;
         currentQuizQuestions.clear();
         currentQuizQuestions.addAll(qc.questions);
+        Collections.shuffle(currentQuizQuestions);
         launchQuizUI();
     }
 
@@ -478,11 +580,11 @@ public class MainActivity extends AppCompatActivity {
 
     private void setOptionColor(Button btn, int bgColor, int strokeColor, int textColor) {
         GradientDrawable gd = new GradientDrawable();
-        gd.setColor(bgColor);
+        gd.setColor(ContextCompat.getColor(this, bgColor));
         gd.setCornerRadius(48f);
-        gd.setStroke(4, strokeColor);
+        gd.setStroke(4, ContextCompat.getColor(this, strokeColor));
         btn.setBackground(gd);
-        btn.setTextColor(textColor);
+        btn.setTextColor(ContextCompat.getColor(this, textColor));
     }
 
     private void submitAnswer(int idx) {
