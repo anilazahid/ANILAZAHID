@@ -429,7 +429,7 @@ public class MainActivity extends AppCompatActivity {
                                 String o4 = qs.child("opt4").getValue(String.class);
                                 Integer ans = qs.child("ansIdx").getValue(Integer.class);
                                 if (ans == null) ans = answerIndex(qs.child("correctAnswer").getValue(String.class));
-                                if(q != null && o1 != null && o2 != null && o3 != null && o4 != null) qList.add(new QuizQuestion(q, o1, o2, o3, o4, ans != null ? ans : 0, 10));
+                                if(q != null && o1 != null && o2 != null && o3 != null && o4 != null) qList.add(new QuizQuestion(qs.getKey(), q, o1, o2, o3, o4, ans != null ? ans : 0, 10));
                             }
                         }
                         QuizBank.StarterCategory matchingStarter = findStarterCategory(starterCategories, title);
@@ -438,13 +438,13 @@ public class MainActivity extends AppCompatActivity {
                             seedQuestions(dSnap.getKey(), matchingStarter);
                         }
                         while (qList.size() < 10) qList.add(new QuizQuestion((title != null ? title : "Quiz") + " Question " + (qList.size() + 1) + "?", "Option A", "Option B", "Option C", "Option D", 0, 10));
-                        quickCategoryList.add(new QuickCategory(title != null ? title : "General", icon != null && !icon.isEmpty() ? icon : "🧩", qList));
+                        quickCategoryList.add(new QuickCategory(dSnap.getKey(), title != null ? title : "General", icon != null && !icon.isEmpty() ? icon : "🧩", qList));
                     }
                 }
                 List<QuizBank.StarterCategory> missing = new ArrayList<>();
                 for (QuizBank.StarterCategory starter : starterCategories) {
                     if (!existingTitles.contains(starter.title)) {
-                        quickCategoryList.add(new QuickCategory(starter.title, starter.icon, starterQuestions(starter)));
+                        quickCategoryList.add(new QuickCategory(starterKey(starter.title), starter.title, starter.icon, starterQuestions(starter)));
                         missing.add(starter);
                     }
                 }
@@ -468,7 +468,10 @@ public class MainActivity extends AppCompatActivity {
 
     private List<QuizQuestion> starterQuestions(QuizBank.StarterCategory category) {
         List<QuizQuestion> questions = new ArrayList<>();
-        for (String[] item : category.questions) questions.add(new QuizQuestion(item[0], item[1], item[2], item[3], item[4], Integer.parseInt(item[5]), 10));
+        for (int index = 0; index < category.questions.length; index++) {
+            String[] item = category.questions[index];
+            questions.add(new QuizQuestion(starterKey(category.title) + "-q" + index, item[0], item[1], item[2], item[3], item[4], Integer.parseInt(item[5]), 10));
+        }
         return questions;
     }
 
@@ -526,7 +529,7 @@ public class MainActivity extends AppCompatActivity {
                             String o3 = qSnap.child("opt3").getValue(String.class); String o4 = qSnap.child("opt4").getValue(String.class);
                             Integer ans = qSnap.child("ansIdx").getValue(Integer.class);
                             Integer pts = qSnap.child("points").getValue(Integer.class);
-                            if (q != null && o1 != null) currentQuizQuestions.add(new QuizQuestion(q, o1, o2, o3, o4, ans != null ? ans : 0, pts != null ? pts : 50));
+                            if (q != null && o1 != null) currentQuizQuestions.add(new QuizQuestion(qSnap.getKey(), q, o1, o2, o3, o4, ans != null ? ans : 0, pts != null ? pts : 50));
                         }
                     }
                     if(currentQuizQuestions.isEmpty()) currentQuizQuestions.add(new QuizQuestion("Tournament Question 1?", "A", "B", "C", "D", 0, 50));
@@ -539,10 +542,49 @@ public class MainActivity extends AppCompatActivity {
 
     private void startQuickQuiz(QuickCategory qc) {
         activeTournament = null; activeQuickCategory = qc;
+        if (auth.getUid() == null) {
+            prepareQuickQuestions(qc, new HashSet<>());
+            return;
+        }
+        db.child("users").child(auth.getUid()).child("answeredQuestions").child(historyKey(qc.id))
+                .addListenerForSingleValueEvent(new ValueEventListener() {
+                    @Override public void onDataChange(@NonNull DataSnapshot snapshot) {
+                        Set<String> answered = new HashSet<>();
+                        for (DataSnapshot item : snapshot.getChildren()) answered.add(item.getKey());
+                        prepareQuickQuestions(qc, answered);
+                    }
+                    @Override public void onCancelled(@NonNull DatabaseError error) { prepareQuickQuestions(qc, new HashSet<>()); }
+                });
+    }
+
+    private void prepareQuickQuestions(QuickCategory category, Set<String> answered) {
+        List<QuizQuestion> unanswered = new ArrayList<>();
+        List<QuizQuestion> all = new ArrayList<>(category.questions);
+        for (QuizQuestion question : all) if (!answered.contains(historyKey(question.id))) unanswered.add(question);
+        Collections.shuffle(unanswered);
+        if (unanswered.size() < 10) {
+            List<QuizQuestion> cycle = new ArrayList<>(all);
+            Collections.shuffle(cycle);
+            for (QuizQuestion question : cycle) if (!containsQuestion(unanswered, question.id)) unanswered.add(question);
+        }
         currentQuizQuestions.clear();
-        currentQuizQuestions.addAll(qc.questions);
-        Collections.shuffle(currentQuizQuestions);
+        int questionCount = Math.min(10, unanswered.size());
+        for (int index = 0; index < questionCount; index++) currentQuizQuestions.add(unanswered.get(index).copyWithShuffledOptions());
         launchQuizUI();
+    }
+
+    private boolean containsQuestion(List<QuizQuestion> questions, String id) {
+        for (QuizQuestion question : questions) if (Objects.equals(question.id, id)) return true;
+        return false;
+    }
+
+    private String starterKey(String title) {
+        return "starter-" + title.toLowerCase(Locale.US).replaceAll("[^a-z0-9]+", "-");
+    }
+
+    private String historyKey(String value) {
+        if (value == null || value.isEmpty()) return "unknown";
+        return value.replace(".", "_").replace("#", "_").replace("$", "_").replace("[", "_").replace("]", "_").replace("/", "_");
     }
 
     private void launchQuizUI() {
@@ -591,6 +633,10 @@ public class MainActivity extends AppCompatActivity {
         if (countDownTimer != null) countDownTimer.cancel();
         for (Button b : btnOpts) b.setEnabled(false);
         QuizQuestion q = currentQuizQuestions.get(currentQIndex);
+        if (activeQuickCategory != null && auth.getUid() != null && q.id != null) {
+            db.child("users").child(auth.getUid()).child("answeredQuestions")
+                .child(historyKey(activeQuickCategory.id)).child(historyKey(q.id)).setValue(true);
+        }
         if (idx >= 0) {
             setOptionColor(btnOpts[idx], R.color.quiz_option_selected, R.color.gold, R.color.gold_text_dark);
         }
@@ -730,6 +776,17 @@ public class MainActivity extends AppCompatActivity {
 
     public static class User { public String username, email, photoUrl; public int points; public User(){} public User(String u, String e, String pic, int p){username=u; email=e; photoUrl=pic; points=p;} }
     public static class Tournament { public String id, title, status, icon; public int entry_points, reward_points, pool_size, playedCount; public boolean hasPlayed; public Tournament(){} }
-    class QuizQuestion { String q; String[] opts = new String[4]; int ansIdx, points; QuizQuestion(String qu, String a, String b, String c, String d, int ans, int pts){ q=qu; opts[0]=a; opts[1]=b; opts[2]=c; opts[3]=d; ansIdx=ans; points=pts; } }
-    class QuickCategory { String title, icon; List<QuizQuestion> questions; QuickCategory(String t, String i, List<QuizQuestion> q){title=t; icon=i; questions=q;} }
+    class QuizQuestion {
+        String id, q; String[] opts = new String[4]; int ansIdx, points;
+        QuizQuestion(String qu, String a, String b, String c, String d, int ans, int pts) { this(null, qu, a, b, c, d, ans, pts); }
+        QuizQuestion(String questionId, String qu, String a, String b, String c, String d, int ans, int pts) {
+            id = questionId; q = qu; opts[0] = a; opts[1] = b; opts[2] = c; opts[3] = d; ansIdx = ans; points = pts;
+        }
+        QuizQuestion copyWithShuffledOptions() {
+            List<Integer> order = Arrays.asList(0, 1, 2, 3);
+            Collections.shuffle(order);
+            return new QuizQuestion(id, q, opts[order.get(0)], opts[order.get(1)], opts[order.get(2)], opts[order.get(3)], order.indexOf(ansIdx), points);
+        }
+    }
+    class QuickCategory { String id, title, icon; List<QuizQuestion> questions; QuickCategory(String t, String i, List<QuizQuestion> q){this(null, t, i, q);} QuickCategory(String categoryId, String t, String i, List<QuizQuestion> q){id=categoryId; title=t; icon=i; questions=q;} }
 }
