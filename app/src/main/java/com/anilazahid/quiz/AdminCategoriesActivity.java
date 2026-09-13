@@ -2,15 +2,111 @@ package com.anilazahid.quiz;
 
 import android.app.AlertDialog;
 import android.os.Bundle;
-import android.widget.*;
-import androidx.recyclerview.widget.*;
-import com.google.firebase.database.*;
-import java.util.*;
+import android.view.View;
+import android.widget.EditText;
+import android.widget.TextView;
+import android.widget.LinearLayout;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.ValueEventListener;
+import java.util.ArrayList;
+import java.util.List;
 
 public class AdminCategoriesActivity extends AdminBaseActivity {
-    private final List<DataSnapshot> items=new ArrayList<>(); private CatAdapter adapter;
-    @Override protected void onCreate(Bundle s){super.onCreate(s);setContentView(R.layout.activity_admin_list);((TextView)findViewById(R.id.adminListTitle)).setText("CATEGORIES");findViewById(R.id.adminListSearch).setVisibility(android.view.View.GONE);findViewById(R.id.adminListBack).setOnClickListener(v->finish());RecyclerView r=findViewById(R.id.adminRecycler);r.setLayoutManager(new LinearLayoutManager(this));adapter=new CatAdapter();r.setAdapter(adapter);findViewById(R.id.adminListAdd).setOnClickListener(v->edit(null));requireAdmin(this::load);}
-    private void load(){db.child("quick_categories").addValueEventListener(new ValueEventListener(){public void onDataChange(DataSnapshot s){items.clear();for(DataSnapshot x:s.getChildren())items.add(x);adapter.notifyDataSetChanged();}public void onCancelled(DatabaseError e){toast("Could not load categories.");}});}
-    private void edit(DataSnapshot old){LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(30,10,30,0);EditText name=new EditText(this);name.setHint("Category name");EditText icon=new EditText(this);icon.setHint("Icon (emoji or text)");box.addView(name);box.addView(icon);if(old!=null){name.setText(old.child("title").getValue(String.class));icon.setText(old.child("icon").getValue(String.class));}new AlertDialog.Builder(this).setTitle(old==null?"Add category":"Edit category").setView(box).setNegativeButton("CANCEL",null).setPositiveButton("SAVE",(d,w)->{String n=name.getText().toString().trim();if(n.isEmpty()){toast("Category name is required.");return;}DatabaseReference ref=old==null?db.child("quick_categories").push():db.child("quick_categories").child(old.getKey());ref.child("title").setValue(n);ref.child("icon").setValue(icon.getText().toString().trim());}).show();}
-    private class CatAdapter extends RecyclerView.Adapter<CatAdapter.H>{public H onCreateViewHolder(android.view.ViewGroup p,int t){TextView v=new TextView(AdminCategoriesActivity.this);v.setTextColor(0xffffffff);v.setTextSize(17);v.setPadding(18,18,18,18);v.setBackgroundResource(R.drawable.bg_card);return new H(v);}public void onBindViewHolder(H h,int i){DataSnapshot s=items.get(i);h.v.setText((s.child("icon").getValue(String.class)==null?"🧩":s.child("icon").getValue(String.class))+"  "+s.child("title").getValue(String.class));h.v.setOnClickListener(v->new AlertDialog.Builder(AdminCategoriesActivity.this).setItems(new String[]{"Edit","Delete"},(d,w)->{if(w==0)edit(s);else new AlertDialog.Builder(AdminCategoriesActivity.this).setTitle("Delete category?").setMessage("Questions inside it will also be deleted.").setNegativeButton("CANCEL",null).setPositiveButton("DELETE",(x,y)->db.child("quick_categories").child(s.getKey()).removeValue()).show();}).show());}public int getItemCount(){return items.size();}class H extends RecyclerView.ViewHolder{TextView v;H(TextView x){super(x);v=x;}}}
+    private final List<DataSnapshot> categories = new ArrayList<>();
+    private CategoryAdapter adapter;
+
+    @Override protected void onCreate(Bundle state) {
+        super.onCreate(state);
+        setContentView(R.layout.activity_admin_list);
+        TextView title = findViewById(R.id.adminListTitle);
+        title.setText("CATEGORY MANAGEMENT");
+        ((android.widget.Button) findViewById(R.id.adminListAdd)).setText("ADD CATEGORY");
+        findViewById(R.id.adminListAdd).setOnClickListener(view -> editCategory(null));
+        findViewById(R.id.adminListSearch).setVisibility(View.GONE);
+        findViewById(R.id.adminListBack).setOnClickListener(view -> finish());
+        RecyclerView list = findViewById(R.id.adminRecycler);
+        list.setLayoutManager(new LinearLayoutManager(this));
+        adapter = new CategoryAdapter();
+        list.setAdapter(adapter);
+        requireAdmin(this::loadCategories);
+    }
+
+    private void loadCategories() {
+        db.child("quick_categories").addValueEventListener(new ValueEventListener() {
+            @Override public void onDataChange(DataSnapshot snapshot) {
+                categories.clear();
+                for (DataSnapshot category : snapshot.getChildren()) categories.add(category);
+                adapter.notifyDataSetChanged();
+            }
+            @Override public void onCancelled(DatabaseError error) { toast("Could not load categories."); }
+        });
+    }
+
+    private void editCategory(DataSnapshot old) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(30, 10, 30, 0);
+        EditText name = new EditText(this);
+        name.setHint("Category name *");
+        EditText icon = new EditText(this);
+        icon.setHint("Icon (optional)");
+        box.addView(name);
+        box.addView(icon);
+        if (old != null) {
+            name.setText(old.child("title").getValue(String.class));
+            icon.setText(old.child("icon").getValue(String.class));
+        }
+        new AlertDialog.Builder(this)
+                .setTitle(old == null ? "ADD CATEGORY" : "EDIT CATEGORY")
+                .setView(box)
+                .setNegativeButton("CANCEL", null)
+                .setPositiveButton("SAVE", (dialog, which) -> {
+                    String title = name.getText().toString().trim();
+                    if (title.isEmpty()) { toast("Category name is required."); return; }
+                    DatabaseReference reference = old == null
+                            ? db.child("quick_categories").push()
+                            : db.child("quick_categories").child(old.getKey());
+                    reference.child("title").setValue(title);
+                    reference.child("icon").setValue(icon.getText().toString().trim());
+                }).show();
+    }
+
+    private class CategoryAdapter extends RecyclerView.Adapter<CategoryAdapter.Holder> {
+        @Override public Holder onCreateViewHolder(android.view.ViewGroup parent, int type) {
+            TextView row = new TextView(AdminCategoriesActivity.this);
+            row.setTextColor(0xffffffff);
+            row.setTextSize(16);
+            row.setPadding(18, 18, 18, 18);
+            row.setBackgroundResource(R.drawable.bg_card);
+            return new Holder(row);
+        }
+        @Override public void onBindViewHolder(Holder holder, int position) {
+            DataSnapshot category = categories.get(position);
+            String icon = category.child("icon").getValue(String.class);
+            String title = category.child("title").getValue(String.class);
+            long count = category.child("questions").getChildrenCount();
+            holder.row.setText((icon == null || icon.isEmpty() ? "🧩" : icon) + "  " + title + "\n" + count + " questions");
+            holder.row.setOnClickListener(view -> new AlertDialog.Builder(AdminCategoriesActivity.this)
+                    .setItems(new String[]{"EDIT CATEGORY", "DELETE CATEGORY"}, (dialog, choice) -> {
+                        if (choice == 0) editCategory(category);
+                        else confirmDelete(category);
+                    }).show());
+        }
+        @Override public int getItemCount() { return categories.size(); }
+        class Holder extends RecyclerView.ViewHolder { TextView row; Holder(TextView view) { super(view); row = view; } }
+    }
+
+    private void confirmDelete(DataSnapshot category) {
+        String title = category.child("title").getValue(String.class);
+        new AlertDialog.Builder(this)
+                .setTitle("DELETE CATEGORY?")
+                .setMessage("Delete " + title + " and its questions? This cannot be undone.")
+                .setNegativeButton("CANCEL", null)
+                .setPositiveButton("DELETE", (dialog, which) -> db.child("quick_categories").child(category.getKey()).removeValue())
+                .show();
+    }
 }
