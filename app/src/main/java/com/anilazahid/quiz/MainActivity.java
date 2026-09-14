@@ -75,6 +75,17 @@ public class MainActivity extends AppCompatActivity {
     private QuickCategory activeQuickCategory = null;
     private List<QuizQuestion> currentQuizQuestions = new ArrayList<>();
     private boolean dailyRewardClaimed;
+    private boolean dailyRewardInProgress;
+    private boolean adRewardInProgress;
+    private boolean userDataLoaded;
+    private boolean tournamentsLoaded;
+    private boolean leaderboardLoaded;
+
+    private static final int WATCH_AD_REWARD_COINS = 50;
+
+    private interface RewardClaimCallback {
+        void onComplete(boolean committed, boolean alreadyClaimed, DatabaseError error);
+    }
 
     private final ActivityResultLauncher<Intent> googleSignInLauncher = registerForActivityResult(
         new ActivityResultContracts.StartActivityForResult(),
@@ -108,11 +119,7 @@ public class MainActivity extends AppCompatActivity {
         MobileAds.initialize(this, status -> {});
 
         // 1. Load Rewarded Ad
-        RewardedAd.load(this, "ca-app-pub-3940256099942544/5224354917", new AdRequest.Builder().build(),
-            new RewardedAdLoadCallback() {
-                @Override public void onAdLoaded(@NonNull RewardedAd ad) { mRewardedAd = ad; }
-                @Override public void onAdFailedToLoad(@NonNull LoadAdError e) { mRewardedAd = null; }
-            });
+        loadRewardedAd();
             
         // 2. Load Banner Ad
         mAdView = findViewById(R.id.adView);
@@ -123,6 +130,14 @@ public class MainActivity extends AppCompatActivity {
         
         // 3. Load Interstitial Ad
         loadInterstitialAd();
+    }
+
+    private void loadRewardedAd() {
+        RewardedAd.load(this, "ca-app-pub-3940256099942544/5224354917", new AdRequest.Builder().build(),
+            new RewardedAdLoadCallback() {
+                @Override public void onAdLoaded(@NonNull RewardedAd ad) { mRewardedAd = ad; }
+                @Override public void onAdFailedToLoad(@NonNull LoadAdError e) { mRewardedAd = null; }
+            });
     }
     
     private void loadInterstitialAd() {
@@ -177,13 +192,13 @@ public class MainActivity extends AppCompatActivity {
             pageCategories.setVisibility(item.getItemId() == R.id.nav_categories ? View.VISIBLE : View.GONE);
             pageRank.setVisibility(item.getItemId() == R.id.nav_rank ? View.VISIBLE : View.GONE);
             pageProfile.setVisibility(item.getItemId() == R.id.nav_profile ? View.VISIBLE : View.GONE);
-            if (item.getItemId() == R.id.nav_rank) loadLeaderboard();
+            if (item.getItemId() == R.id.nav_rank && !leaderboardLoaded) loadLeaderboard();
             return true;
         });
         findViewById(R.id.btnProfileLogout).setOnClickListener(v -> logout());
         findViewById(R.id.btnOpenAdmin).setOnClickListener(v -> startActivity(new Intent(this, AdminLoginActivity.class)));
         findViewById(R.id.btnEarnMoreCoins).setOnClickListener(v -> {
-            if (mRewardedAd != null) { mRewardedAd.show(this, reward -> { addCoins(50, "Video Ad"); Toast.makeText(this, "+50 Coins Claimed!", Toast.LENGTH_SHORT).show(); initAds(); }); } else { addCoins(10, "Free Claim"); Toast.makeText(this, "+10 Free Coins!", Toast.LENGTH_SHORT).show(); }
+            claimAdReward();
         });
         findViewById(R.id.btnDailyClaim).setOnClickListener(v -> claimDailyReward());
         if (dailyRewardClaim != null) dailyRewardClaim.setOnClickListener(v -> claimDailyReward());
@@ -288,6 +303,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void logout() {
         auth.signOut();
+        userDataLoaded = false;
+        tournamentsLoaded = false;
+        leaderboardLoaded = false;
         mGoogleSignInClient.signOut().addOnCompleteListener(this, task -> returnToLogin());
     }
 
@@ -300,14 +318,17 @@ public class MainActivity extends AppCompatActivity {
     private void showMainApp() {
         authView.setVisibility(View.GONE); mainAppView.setVisibility(View.VISIBLE);
         bottomNav.setSelectedItemId(R.id.nav_home);
-        loadUserData(); loadTournaments(); loadLeaderboard();
+        if (!userDataLoaded) loadUserData();
+        if (!tournamentsLoaded) loadTournaments();
+        if (!leaderboardLoaded) loadLeaderboard();
     }
 
     private void loadUserData() {
         if (auth.getUid() == null) return;
-        db.child("users").child(auth.getUid()).addValueEventListener(new ValueEventListener() {
+        db.child("users").child(auth.getUid()).addListenerForSingleValueEvent(new ValueEventListener() {
             @Override public void onDataChange(@NonNull DataSnapshot s) {
                 if (!s.exists()) return;
+            userDataLoaded = true;
                 userNameStr = s.child("username").getValue(String.class);
                 String email = s.child("email").getValue(String.class);
                 String picUrl = s.child("photoUrl").getValue(String.class);
@@ -315,11 +336,10 @@ public class MainActivity extends AppCompatActivity {
                 userCoins = pts != null ? pts : 100;
                 updateDailyRewardState(s.child("dailyRewardDate").getValue(String.class));
 
-                tvUserName.setText("Hello, " + (userNameStr != null ? userNameStr : "Player") + " 👋"); 
-                tvMainCoins.setText(String.valueOf(userCoins));
+                tvUserName.setText("Hello, " + (userNameStr != null ? userNameStr : "Player") + " 👋");
+                updateCoinViews();
                 profName.setText(userNameStr != null ? userNameStr : "Player"); 
                 profEmail.setText(email != null ? email : "");
-                profCoins.setText("🪙 " + userCoins);
 
                 if (picUrl != null && !picUrl.isEmpty() && !isDestroyed()) {
                     Glide.with(MainActivity.this).load(picUrl).circleCrop().into(imgUserAvatar);
@@ -330,10 +350,29 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void addCoins(int amount, String desc) { 
-        if(auth.getUid() != null) {
-            db.child("users").child(auth.getUid()).child("points").setValue(userCoins + amount); 
-        }
+    private void addCoins(int amount, String desc) {
+        if (auth.getUid() == null) return;
+        db.child("users").child(auth.getUid()).child("points").runTransaction(new Transaction.Handler() {
+            @NonNull @Override public Transaction.Result doTransaction(MutableData currentData) {
+                Integer currentPoints = currentData.getValue(Integer.class);
+                currentData.setValue((currentPoints != null ? currentPoints : 0) + amount);
+                return Transaction.success(currentData);
+            }
+            @Override public void onComplete(DatabaseError error, boolean committed, DataSnapshot snapshot) {
+                if (committed && snapshot != null) {
+                    Integer updatedPoints = snapshot.getValue(Integer.class);
+                    if (updatedPoints != null) {
+                        userCoins = updatedPoints;
+                        updateCoinViews();
+                    }
+                }
+            }
+        });
+    }
+
+    private void updateCoinViews() {
+        if (tvMainCoins != null) tvMainCoins.setText(String.valueOf(userCoins));
+        if (profCoins != null) profCoins.setText("🪙 " + userCoins);
     }
 
     private String todayKey() {
@@ -342,53 +381,127 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateDailyRewardState(String claimedDate) {
         dailyRewardClaimed = todayKey().equals(claimedDate);
-        String label = dailyRewardClaimed ? "CLAIMED TODAY" : "CLAIM DAILY REWARD (+20)";
-        if (dailyRewardStatus != null) dailyRewardStatus.setText(dailyRewardClaimed ? "Daily reward claimed. Come back tomorrow." : "Claim 20 coins once every day.");
+        String label = dailyRewardInProgress ? "CLAIMING..." : (dailyRewardClaimed ? "CLAIMED TODAY" : "CLAIM DAILY REWARD (+20)");
+        if (dailyRewardStatus != null) dailyRewardStatus.setText(dailyRewardInProgress ? "Claiming your daily reward..." : (dailyRewardClaimed ? "Daily reward claimed. Come back tomorrow." : "Claim 20 coins once every day."));
         if (dailyRewardClaim != null) {
             dailyRewardClaim.setText(label);
-            dailyRewardClaim.setEnabled(!dailyRewardClaimed);
+            dailyRewardClaim.setEnabled(!dailyRewardClaimed && !dailyRewardInProgress);
             dailyRewardClaim.setBackgroundResource(dailyRewardClaimed ? R.drawable.bg_card : R.drawable.bg_btn_gold);
         }
         Button profileClaim = findViewById(R.id.btnDailyClaim);
         profileClaim.setText(label);
-        profileClaim.setEnabled(!dailyRewardClaimed);
+        profileClaim.setEnabled(!dailyRewardClaimed && !dailyRewardInProgress);
     }
 
     private void claimDailyReward() {
-        if (auth.getUid() == null || dailyRewardClaimed) {
+        if (auth.getUid() == null || dailyRewardClaimed || dailyRewardInProgress) {
             Toast.makeText(this, "Daily reward already claimed today.", Toast.LENGTH_SHORT).show();
             return;
         }
         String today = todayKey();
-        DatabaseReference rewardDate = db.child("users").child(auth.getUid()).child("dailyRewardDate");
-        rewardDate.runTransaction(new Transaction.Handler() {
+        dailyRewardInProgress = true;
+        updateDailyRewardState(today);
+        claimCoinsOnce("daily-" + today, QuizBank.DAILY_REWARD_COINS, "Daily Bonus", today,
+            (committed, alreadyClaimed, error) -> {
+                dailyRewardInProgress = false;
+                if (committed) {
+                    dailyRewardClaimed = true;
+                    updateDailyRewardState(today);
+                    Toast.makeText(this, "+" + QuizBank.DAILY_REWARD_COINS + " Daily Coins Added!", Toast.LENGTH_SHORT).show();
+                } else if (alreadyClaimed) {
+                    dailyRewardClaimed = true;
+                    updateDailyRewardState(today);
+                    Toast.makeText(this, "Daily reward already claimed today.", Toast.LENGTH_SHORT).show();
+                } else {
+                    updateDailyRewardState(today);
+                    Toast.makeText(this, "Could not claim daily reward. Try again.", Toast.LENGTH_SHORT).show();
+                }
+            });
+    }
+
+    private void claimAdReward() {
+        Button rewardButton = findViewById(R.id.btnEarnMoreCoins);
+        if (adRewardInProgress) return;
+        if (mRewardedAd == null) {
+            rewardButton.setText("AD UNAVAILABLE");
+            Toast.makeText(this, "The test ad is still loading. Try again shortly.", Toast.LENGTH_SHORT).show();
+            loadRewardedAd();
+            rewardButton.postDelayed(() -> rewardButton.setText("WATCH AD +" + WATCH_AD_REWARD_COINS), 1500);
+            return;
+        }
+
+        adRewardInProgress = true;
+        rewardButton.setEnabled(false);
+        rewardButton.setText("CLAIMING...");
+        String claimId = "ad-" + UUID.randomUUID();
+        final boolean[] rewardEarned = {false};
+        RewardedAd ad = mRewardedAd;
+        mRewardedAd = null;
+        ad.setFullScreenContentCallback(new FullScreenContentCallback() {
+            @Override public void onAdDismissedFullScreenContent() {
+                loadRewardedAd();
+                if (!rewardEarned[0]) finishAdReward(false, "Ad closed before the reward was earned.");
+            }
+
+            @Override public void onAdFailedToShowFullScreenContent(@NonNull AdError error) {
+                finishAdReward(false, "The ad could not be shown. No coins were added.");
+            }
+        });
+        ad.show(this, reward -> {
+            rewardEarned[0] = true;
+            claimCoinsOnce(claimId, WATCH_AD_REWARD_COINS, "Video Ad", null,
+                (committed, alreadyClaimed, error) -> {
+                    if (committed) finishAdReward(true, "+" + WATCH_AD_REWARD_COINS + " Coins Claimed!");
+                    else if (alreadyClaimed) finishAdReward(false, "This ad reward was already claimed.");
+                    else finishAdReward(false, "Could not claim the ad reward. Try again.");
+                });
+        });
+    }
+
+    private void finishAdReward(boolean success, String message) {
+        adRewardInProgress = false;
+        Button rewardButton = findViewById(R.id.btnEarnMoreCoins);
+        rewardButton.setEnabled(true);
+        rewardButton.setText("WATCH AD +" + WATCH_AD_REWARD_COINS);
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+    }
+
+    private void claimCoinsOnce(String claimId, int amount, String description, String dailyDate, RewardClaimCallback callback) {
+        if (auth.getUid() == null) {
+            callback.onComplete(false, false, null);
+            return;
+        }
+        db.child("users").child(auth.getUid()).runTransaction(new Transaction.Handler() {
             @NonNull @Override public Transaction.Result doTransaction(MutableData currentData) {
-                if (today.equals(currentData.getValue(String.class))) return Transaction.abort();
-                currentData.setValue(today);
+                MutableData claim = currentData.child("rewardClaims").child(claimId);
+                if (claim.getValue() != null) return Transaction.abort();
+                Integer currentPoints = currentData.child("points").getValue(Integer.class);
+                currentData.child("points").setValue((currentPoints != null ? currentPoints : 0) + amount);
+                claim.child("amount").setValue(amount);
+                claim.child("description").setValue(description);
+                claim.child("claimedAt").setValue(ServerValue.TIMESTAMP);
+                if (dailyDate != null) currentData.child("dailyRewardDate").setValue(dailyDate);
                 return Transaction.success(currentData);
             }
             @Override public void onComplete(DatabaseError error, boolean committed, DataSnapshot snapshot) {
-                if (error != null || !committed) {
-                    if (!committed) {
-                        dailyRewardClaimed = true;
-                        updateDailyRewardState(today);
-                        Toast.makeText(MainActivity.this, "Daily reward already claimed today.", Toast.LENGTH_SHORT).show();
-                    } else {
-                        Toast.makeText(MainActivity.this, "Could not claim daily reward. Try again.", Toast.LENGTH_SHORT).show();
+                boolean alreadyClaimed = error == null && !committed && snapshot != null
+                    && snapshot.child("rewardClaims").child(claimId).exists();
+                if (committed && snapshot != null) {
+                    Integer updatedPoints = snapshot.child("points").getValue(Integer.class);
+                    if (updatedPoints != null) {
+                        userCoins = updatedPoints;
+                        updateCoinViews();
                     }
-                    return;
                 }
-                dailyRewardClaimed = true;
-                addCoins(QuizBank.DAILY_REWARD_COINS, "Daily Bonus");
-                updateDailyRewardState(today);
-                Toast.makeText(MainActivity.this, "+20 Daily Coins Added!", Toast.LENGTH_SHORT).show();
+                callback.onComplete(committed, alreadyClaimed, error);
             }
         });
     }
 
     private void loadTournaments() {
-        db.child("tournaments").addValueEventListener(new ValueEventListener() {
+        db.child("tournaments").addListenerForSingleValueEvent(new ValueEventListener() {
             @Override public void onDataChange(@NonNull DataSnapshot s) {
+            tournamentsLoaded = true;
                 tournamentList.clear();
                 if (s.exists()) {
                     for (DataSnapshot ds : s.getChildren()) {
@@ -499,8 +612,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadLeaderboard() {
-        db.child("users").orderByChild("points").limitToLast(50).addValueEventListener(new ValueEventListener() {
+        db.child("users").orderByChild("points").limitToLast(50).addListenerForSingleValueEvent(new ValueEventListener() {
             @Override public void onDataChange(@NonNull DataSnapshot s) {
+            leaderboardLoaded = true;
                 leaderboardList.clear();
                 for (DataSnapshot ds : s.getChildren()) { User u = ds.getValue(User.class); if (u != null) leaderboardList.add(0, u); }
                 recyclerLeaderboardFull.setAdapter(new LeaderboardAdapter(leaderboardList));
