@@ -26,6 +26,7 @@ public class AdminQuestionsActivity extends AdminBaseActivity {
     private final List<DataSnapshot> questions = new ArrayList<>();
     private Spinner categorySpinner;
     private QuestionAdapter adapter;
+    private TextView empty;
     private String selectedCategory;
 
     @Override protected void onCreate(Bundle state) {
@@ -37,6 +38,7 @@ public class AdminQuestionsActivity extends AdminBaseActivity {
         findViewById(R.id.adminListSearch).setVisibility(View.GONE);
         findViewById(R.id.adminListBack).setOnClickListener(view -> finish());
         categorySpinner = new Spinner(this);
+        empty = findViewById(R.id.adminListEmpty);
         ((LinearLayout) findViewById(R.id.adminListTitle).getParent()).addView(categorySpinner, 0,
                 new LinearLayout.LayoutParams(0, 48, 1));
         RecyclerView list = findViewById(R.id.adminRecycler);
@@ -67,22 +69,29 @@ public class AdminQuestionsActivity extends AdminBaseActivity {
                     }
                 });
             }
-            @Override public void onCancelled(DatabaseError error) { toast("Could not load categories."); }
+            @Override public void onCancelled(DatabaseError error) { showError("Could not load categories: " + error.getMessage()); }
         });
     }
 
     private void loadQuestions() {
         questions.clear();
         adapter.notifyDataSetChanged();
+        if (empty != null) { empty.setText("Loading questions..."); empty.setVisibility(View.VISIBLE); }
         if (selectedCategory == null) return;
         db.child("quick_categories").child(selectedCategory).child("questions")
                 .addListenerForSingleValueEvent(new ValueEventListener() {
                     @Override public void onDataChange(DataSnapshot snapshot) {
                         for (DataSnapshot question : snapshot.getChildren()) questions.add(question);
                         adapter.notifyDataSetChanged();
+                        if (empty != null) { empty.setText("No questions in this category yet."); empty.setVisibility(questions.isEmpty() ? View.VISIBLE : View.GONE); }
                     }
-                    @Override public void onCancelled(DatabaseError error) { toast("Could not load questions."); }
+                    @Override public void onCancelled(DatabaseError error) { showError("Could not load questions: " + error.getMessage()); }
                 });
+    }
+
+    private void showError(String message) {
+        if (empty != null) { empty.setText(message); empty.setVisibility(View.VISIBLE); }
+        toast(message);
     }
 
     private EditText field(LinearLayout container, String hint) {
@@ -139,7 +148,21 @@ public class AdminQuestionsActivity extends AdminBaseActivity {
             data.put("q", values[0]); data.put("opt1", values[1]); data.put("opt2", values[2]); data.put("opt3", values[3]); data.put("opt4", values[4]);
             data.put("ansIdx", answerIndex); data.put("correctAnswer", String.valueOf((char) ('A' + answerIndex))); data.put("points", 10);
             data.put("explanation", explanation.getText().toString().trim()); data.put("difficulty", difficulty.getText().toString().trim());
-            reference.updateChildren(data).addOnCompleteListener(task -> { if (task.isSuccessful()) { toast("Question saved."); dialog.dismiss(); loadQuestions(); } else toast("Could not save question."); });
+            final String normalizedQuestion = values[0].toLowerCase(java.util.Locale.US);
+            db.child("quick_categories").child(selectedCategory).child("questions").addListenerForSingleValueEvent(new ValueEventListener() {
+                @Override public void onDataChange(DataSnapshot snapshot) {
+                    for (DataSnapshot existing : snapshot.getChildren()) {
+                        if (old != null && existing.getKey().equals(old.getKey())) continue;
+                        String existingText = existing.child("q").getValue(String.class);
+                        if (existingText != null && normalizedQuestion.equals(existingText.trim().toLowerCase(java.util.Locale.US))) {
+                            toast("A question with this text already exists in this category.");
+                            return;
+                        }
+                    }
+                    reference.updateChildren(data).addOnCompleteListener(task -> { if (task.isSuccessful()) { toast("Question saved."); dialog.dismiss(); loadCategories(); } else toast("Could not save question."); });
+                }
+                @Override public void onCancelled(DatabaseError error) { showError("Could not verify existing questions: " + error.getMessage()); }
+            });
         }));
         dialog.show();
     }
@@ -150,7 +173,7 @@ public class AdminQuestionsActivity extends AdminBaseActivity {
                 .setMessage("This question will be permanently deleted.")
                 .setNegativeButton("CANCEL", null)
                 .setPositiveButton("DELETE", (dialog, which) -> db.child("quick_categories").child(selectedCategory).child("questions").child(question.getKey()).removeValue().addOnCompleteListener(task -> {
-                    if (task.isSuccessful()) { toast("Question deleted."); loadQuestions(); }
+                    if (task.isSuccessful()) { toast("Question deleted."); loadCategories(); }
                     else toast("Could not delete question.");
                 }))
                 .show();

@@ -27,7 +27,14 @@ public class AdminDashboardActivity extends AdminBaseActivity {
         });
     }
     private void countQuestions() {
-        ((android.widget.TextView) findViewById(R.id.adminQuestionsCount)).setText("300");
+        db.child("quick_categories").addListenerForSingleValueEvent(new com.google.firebase.database.ValueEventListener() {
+            @Override public void onDataChange(com.google.firebase.database.DataSnapshot snapshot) {
+                long total = 0;
+                for (com.google.firebase.database.DataSnapshot category : snapshot.getChildren()) total += category.child("questions").getChildrenCount();
+                ((android.widget.TextView) findViewById(R.id.adminQuestionsCount)).setText(String.valueOf(total));
+            }
+            @Override public void onCancelled(com.google.firebase.database.DatabaseError error) { ((android.widget.TextView) findViewById(R.id.adminQuestionsCount)).setText("ERROR"); }
+        });
     }
     private void countAttempts() {
         final long[] counts = {0, 0};

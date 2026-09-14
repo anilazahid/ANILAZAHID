@@ -98,22 +98,23 @@ public class MainActivity extends AppCompatActivity {
     private boolean quizActive;
     private boolean answerLocked;
     private String quizAttemptId;
+    private long profilePictureOperation;
 
     private final ActivityResultLauncher<String[]> profilePicturePicker = registerForActivityResult(
             new ActivityResultContracts.OpenDocument(), uri -> {
                 if (uri == null || auth.getUid() == null) return;
-                try {
-                    getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                } catch (SecurityException ignored) {
-                }
                 String persistentPath = copyProfilePicture(uri);
                 if (persistentPath == null) {
                     Toast.makeText(this, "Could not save profile picture.", Toast.LENGTH_SHORT).show();
                     return;
                 }
+                if (persistentPath == null) return;
+                long operation = ++profilePictureOperation;
                 displayProfilePicture(persistentPath);
                 db.child("users").child(auth.getUid()).child("photoUrl").setValue(persistentPath)
-                        .addOnFailureListener(error -> Toast.makeText(this, "Could not save profile picture.", Toast.LENGTH_SHORT).show());
+                    .addOnFailureListener(error -> {
+                        if (operation == profilePictureOperation) Toast.makeText(this, "Could not save profile picture.", Toast.LENGTH_SHORT).show();
+                    });
             });
 
     private static final int WATCH_AD_REWARD_COINS = 50;
@@ -277,9 +278,27 @@ public class MainActivity extends AppCompatActivity {
         TextView dTitle = dialog.findViewById(R.id.dialogTitle);
         TextView dMsg = dialog.findViewById(R.id.dialogMessage);
         Button dBtn = dialog.findViewById(R.id.dialogBtn);
+        LinearLayout container = (LinearLayout) dBtn.getParent();
         dIcon.setText("🌟"); dTitle.setText(title); dMsg.setText(message);
+        if (title.contains("Refer")) {
+            Button shareButton = new Button(this);
+            shareButton.setText("SHARE");
+            shareButton.setTextColor(ContextCompat.getColor(this, R.color.text_primary));
+            shareButton.setBackgroundResource(R.drawable.bg_btn_google);
+            LinearLayout.LayoutParams shareParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 50);
+            shareParams.setMargins(0, 0, 0, 10);
+            container.addView(shareButton, container.indexOfChild(dBtn), shareParams);
+            shareButton.setOnClickListener(v -> shareReferralMessage());
+        }
         dBtn.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
+    }
+
+    private void shareReferralMessage() {
+        Intent shareIntent = new Intent(Intent.ACTION_SEND);
+        shareIntent.setType("text/plain");
+        shareIntent.putExtra(Intent.EXTRA_TEXT, "Join Quiz With Anila Zahid and start your quiz journey! Download the app and challenge your friends.");
+        startActivity(Intent.createChooser(shareIntent, "Share Quiz With Anila Zahid"));
     }
 
     private void showEditProfileDialog() {
@@ -364,11 +383,9 @@ public class MainActivity extends AppCompatActivity {
         auth.signInWithCredential(credential).addOnSuccessListener(authResult -> {
             FirebaseUser user = authResult.getUser();
             if (user != null) {
-                String picUrl = user.getPhotoUrl() != null ? user.getPhotoUrl().toString() : "";
                 db.child("users").child(user.getUid()).addListenerForSingleValueEvent(new ValueEventListener() {
                     @Override public void onDataChange(@NonNull DataSnapshot s) {
-                        if (!s.exists()) db.child("users").child(user.getUid()).setValue(new User(user.getDisplayName() != null ? user.getDisplayName() : "Player", user.getEmail() != null ? user.getEmail() : "", picUrl, 100));
-                        else if (picUrl.length() > 0) db.child("users").child(user.getUid()).child("photoUrl").setValue(picUrl);
+                        if (!s.exists()) db.child("users").child(user.getUid()).setValue(new User(user.getDisplayName() != null ? user.getDisplayName() : "Player", user.getEmail() != null ? user.getEmail() : "", "", 100));
                         showMainApp();
                     }
                     @Override public void onCancelled(@NonNull DatabaseError error) {}
@@ -419,19 +436,10 @@ public class MainActivity extends AppCompatActivity {
                 profName.setText(userNameStr != null ? userNameStr : "Player"); 
                 profEmail.setText(email != null ? email : "");
 
-                if (picUrl != null && !picUrl.isEmpty() && !isDestroyed()) {
-                    if (picUrl.startsWith("content://")) {
-                        String migratedPath = copyProfilePicture(Uri.parse(picUrl));
-                        if (migratedPath != null) {
-                            displayProfilePicture(migratedPath);
-                            db.child("users").child(auth.getUid()).child("photoUrl").setValue(migratedPath);
-                        }
-                    } else if (picUrl.startsWith("/") && !new File(picUrl).exists()) {
-                        imgUserAvatar.setImageResource(R.drawable.ic_user);
-                        imgProfileAvatar.setImageResource(R.drawable.ic_user);
-                    } else {
-                        displayProfilePicture(picUrl);
-                    }
+                if (isOwnedProfilePicture(picUrl) && new File(picUrl).exists()) displayProfilePicture(picUrl);
+                else {
+                    clearProfilePictureViews();
+                    if (picUrl != null && !picUrl.isEmpty()) db.child("users").child(auth.getUid()).child("photoUrl").removeValue();
                 }
             }
             @Override public void onCancelled(@NonNull DatabaseError e) { userDataLoading = false; }
@@ -439,10 +447,30 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void displayProfilePicture(String pictureReference) {
-        if (pictureReference == null || pictureReference.isEmpty() || isDestroyed()) return;
-        Uri pictureUri = pictureReference.startsWith("/") ? Uri.fromFile(new File(pictureReference)) : Uri.parse(pictureReference);
+        if (!isOwnedProfilePicture(pictureReference) || !new File(pictureReference).exists() || isDestroyed()) {
+            clearProfilePictureViews();
+            return;
+        }
+        Uri pictureUri = Uri.fromFile(new File(pictureReference));
         Glide.with(this).load(pictureUri).circleCrop().into(imgUserAvatar);
         Glide.with(this).load(pictureUri).circleCrop().into(imgProfileAvatar);
+    }
+
+    private boolean isOwnedProfilePicture(String pictureReference) {
+        if (pictureReference == null || pictureReference.isEmpty() || auth.getUid() == null) return false;
+        try {
+            File expected = new File(getFilesDir(), "profile_" + historyKey(auth.getUid()) + ".img").getCanonicalFile();
+            return expected.getAbsolutePath().equals(new File(pictureReference).getCanonicalPath());
+        } catch (Exception error) {
+            return false;
+        }
+    }
+
+    private void clearProfilePictureViews() {
+        if (imgUserAvatar != null) Glide.with(this).clear(imgUserAvatar);
+        if (imgProfileAvatar != null) Glide.with(this).clear(imgProfileAvatar);
+        if (imgUserAvatar != null) imgUserAvatar.setImageResource(R.drawable.ic_user);
+        if (imgProfileAvatar != null) imgProfileAvatar.setImageResource(R.drawable.ic_user);
     }
 
     private String copyProfilePicture(Uri source) {
@@ -462,11 +490,11 @@ public class MainActivity extends AppCompatActivity {
 
     private void removeProfilePicture() {
         if (auth.getUid() == null) return;
-        imgUserAvatar.setImageResource(R.drawable.ic_user);
-        imgProfileAvatar.setImageResource(R.drawable.ic_user);
+        profilePictureOperation++;
+        clearProfilePictureViews();
         File localPicture = new File(getFilesDir(), "profile_" + historyKey(auth.getUid()) + ".img");
         if (localPicture.exists()) localPicture.delete();
-        db.child("users").child(auth.getUid()).child("photoUrl").setValue("")
+        db.child("users").child(auth.getUid()).child("photoUrl").removeValue()
                 .addOnSuccessListener(ignored -> Toast.makeText(this, "Profile picture removed.", Toast.LENGTH_SHORT).show())
                 .addOnFailureListener(error -> Toast.makeText(this, "Could not remove profile picture.", Toast.LENGTH_SHORT).show());
     }
@@ -727,7 +755,6 @@ public class MainActivity extends AppCompatActivity {
                     List<QuizQuestion> questions = firebaseCategory == null
                             ? starterQuestions(starter)
                             : firebaseQuestions(firebaseCategory);
-                        if (questions.size() > 20) questions = new ArrayList<>(questions.subList(0, 20));
                     List<String[]> missingQuestions = new ArrayList<>();
                     Set<String> existingQuestionTexts = new HashSet<>();
                     for (QuizQuestion question : questions) existingQuestionTexts.add(question.q);
