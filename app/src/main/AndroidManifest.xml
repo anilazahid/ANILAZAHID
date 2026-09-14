@@ -16,6 +16,7 @@
         <activity android:name=".AdminCategoriesActivity" android:exported="false" />
         <activity android:name=".AdminQuestionsActivity" android:exported="false" />
         <activity android:name=".AdminResultsActivity" android:exported="false" />
+        <activity android:name=".AdminTournamentsActivity" android:exported="false" />
         <activity android:name=".AdminSettingsActivity" android:exported="false" />
     </application>
 </manifest>

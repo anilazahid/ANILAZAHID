@@ -55,7 +55,7 @@ public class MainActivity extends AppCompatActivity {
     private Button dailyRewardClaim;
     private ImageView imgUserAvatar, imgProfileAvatar, homeTrophy3D;
     private BottomNavigationView bottomNav;
-    private RecyclerView recyclerCategories, recyclerTournamentsFull, recyclerLeaderboardFull;
+    private RecyclerView recyclerCategories, recyclerTournamentsFull, recyclerTournamentsUpcoming, recyclerLeaderboardFull;
     private ProgressBar categoriesProgress, tournamentsProgress, leaderboardProgress;
 
     private View quizContainer, quizTopicBanner;
@@ -90,6 +90,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean leaderboardLoading;
     private boolean quickCategoriesLoading;
     private boolean quizActive;
+    private boolean answerLocked;
     private String quizAttemptId;
 
     private final ActivityResultLauncher<String[]> profilePicturePicker = registerForActivityResult(
@@ -194,6 +195,7 @@ public class MainActivity extends AppCompatActivity {
 
         recyclerCategories = findViewById(R.id.recyclerCategories); recyclerCategories.setLayoutManager(new GridLayoutManager(this, 3));
         recyclerTournamentsFull = findViewById(R.id.recyclerTournamentsFull); recyclerTournamentsFull.setLayoutManager(new LinearLayoutManager(this));
+        recyclerTournamentsUpcoming = findViewById(R.id.recyclerTournamentsUpcoming); recyclerTournamentsUpcoming.setLayoutManager(new LinearLayoutManager(this));
         recyclerLeaderboardFull = findViewById(R.id.recyclerLeaderboardFull); recyclerLeaderboardFull.setLayoutManager(new LinearLayoutManager(this));
         categoriesProgress = findViewById(R.id.categoriesLoading);
         tournamentsProgress = findViewById(R.id.tournamentsLoading);
@@ -232,12 +234,10 @@ public class MainActivity extends AppCompatActivity {
         
         // Profile features listeners
         findViewById(R.id.btnEditProfile).setOnClickListener(v -> showEditProfileDialog());
-        findViewById(R.id.btnProfilePicture).setOnClickListener(v -> profilePicturePicker.launch(new String[]{"image/*"}));
-        findViewById(R.id.btnRemoveProfilePicture).setOnClickListener(v -> removeProfilePicture());
         findViewById(R.id.menuAchievements).setOnClickListener(v -> showFeatureDialog("🏅 Achievements", "• Quiz Master (Unlocked)\n• Tournament Champ (Unlocked)\n• Streak Legend (5 Days Active)\n• High Roller (500+ Coins Earned)"));
         findViewById(R.id.menuRewards).setOnClickListener(v -> showFeatureDialog("🎁 Rewards Center", "• Daily Login Bonus: Active (+20 Coins)\n• Spin & Win: Available Every 4 Hours\n• Referral Bonus: +50 Coins per Friend"));
         findViewById(R.id.menuHistory).setOnClickListener(v -> showFeatureDialog("🕐 Match History", "• Quick Quiz: +40 Points (Won)\n• Tournament Arena: +150 Points (1st Place)\n• Quick Quiz: +10 Points (Completed)"));
-        findViewById(R.id.menuReferEarn).setOnClickListener(v -> showFeatureDialog("👥 Refer & Earn", "Share your invite link with friends!\n\nYour Referral Code: JAVAGOAT2026\n\nEarn 50 coins instantly when your friend joins."));
+        findViewById(R.id.menuReferEarn).setOnClickListener(v -> showFeatureDialog("👥 Refer & Earn", "Join Quiz With Anila Zahid and start your quiz journey!\n\nShare this app with friends for safe in-app rewards."));
 
         findViewById(R.id.btnCloseQuiz).setOnClickListener(v -> exitQuiz());
         for (int i = 0; i < 4; i++) { final int ansIdx = i; btnOpts[i].setOnClickListener(v -> submitAnswer(ansIdx)); }
@@ -273,6 +273,13 @@ public class MainActivity extends AppCompatActivity {
         dTitle.setText("Edit Profile");
         dMsg.setVisibility(View.GONE);
 
+        Button choosePicture = new Button(this);
+        choosePicture.setText("CHOOSE PICTURE");
+        choosePicture.setOnClickListener(v -> profilePicturePicker.launch(new String[]{"image/*"}));
+        Button removePicture = new Button(this);
+        removePicture.setText("REMOVE PICTURE");
+        removePicture.setOnClickListener(v -> removeProfilePicture());
+
         EditText inputName = new EditText(this);
         inputName.setHint("Enter new username");
         inputName.setText(userNameStr);
@@ -286,6 +293,8 @@ public class MainActivity extends AppCompatActivity {
         inputName.setLayoutParams(params);
 
         container.addView(inputName, 2);
+        container.addView(choosePicture, 3);
+        container.addView(removePicture, 4);
 
         dBtn.setText("SAVE CHANGES");
         dBtn.setOnClickListener(v -> {
@@ -560,24 +569,40 @@ public class MainActivity extends AppCompatActivity {
                 if (tournamentsProgress != null) tournamentsProgress.setVisibility(View.GONE);
             tournamentsLoaded = true;
                 tournamentList.clear();
+                List<Tournament> upcoming = new ArrayList<>();
                 if (s.exists()) {
                     for (DataSnapshot ds : s.getChildren()) {
                         Tournament t = ds.getValue(Tournament.class);
-                        if (t != null && t.entry_points > 0) {
+                        if (t != null && t.published && isTournamentVisible(t)) {
                             t.id = ds.getKey();
                             t.playedCount = (int) ds.child("players").getChildrenCount();
                             t.hasPlayed = auth.getUid() != null && ds.child("players").hasChild(auth.getUid());
-                            tournamentList.add(t);
+                            if ("UPCOMING".equals(t.status)) upcoming.add(t); else tournamentList.add(t);
                         }
                     }
                 }
                 recyclerTournamentsFull.setAdapter(new TournamentFullAdapter(tournamentList));
+                recyclerTournamentsUpcoming.setAdapter(new TournamentFullAdapter(upcoming));
             }
             @Override public void onCancelled(@NonNull DatabaseError e) {
                 tournamentsLoading = false;
                 if (tournamentsProgress != null) tournamentsProgress.setVisibility(View.GONE);
             }
         });
+    }
+
+    private boolean isTournamentVisible(Tournament tournament) {
+        long now = System.currentTimeMillis();
+        if (tournament.startTime > 0 && now < tournament.startTime) {
+            tournament.status = "UPCOMING";
+            return true;
+        }
+        if (tournament.endTime > 0 && now >= tournament.endTime) {
+            tournament.status = "ENDED";
+            return false;
+        }
+        tournament.status = "ONGOING";
+        return true;
     }
 
     private void loadQuickCategoriesFromFirebase() {
@@ -719,12 +744,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void startQuiz(Tournament t) {
         if (t.hasPlayed) { Toast.makeText(this, "You already completed this pool!", Toast.LENGTH_SHORT).show(); return; }
-        if (t.pool_size > 0 && t.playedCount >= t.pool_size) { Toast.makeText(this, "This pool is full!", Toast.LENGTH_SHORT).show(); return; }
-        if (t.entry_points > userCoins) { Toast.makeText(this, "Not enough coins to join pool!", Toast.LENGTH_SHORT).show(); return; }
+        if (!"ONGOING".equals(t.status)) { Toast.makeText(this, "This tournament is not ongoing.", Toast.LENGTH_SHORT).show(); return; }
 
         activeTournament = t; activeQuickCategory = null;
-        addCoins(-t.entry_points, "Tournament Entry Fee");
-        Toast.makeText(this, "Deducted " + t.entry_points + " Entry Coins", Toast.LENGTH_SHORT).show();
         currentQuizQuestions.clear();
 
         if (t.id != null) {
@@ -798,6 +820,7 @@ public class MainActivity extends AppCompatActivity {
     private void launchQuizUI() {
         quizContainer.setVisibility(View.VISIBLE);
         currentQIndex = 0; coinsEarnedInQuiz = 0; correctAnswersCount = 0;
+        answerLocked = false;
         quizActive = true;
         quizAttemptId = UUID.randomUUID().toString();
         if (activeQuickCategory != null) {
@@ -819,6 +842,7 @@ public class MainActivity extends AppCompatActivity {
             b.setTextColor(ContextCompat.getColor(this, R.color.text_primary));
             b.setEnabled(true);
         }
+        answerLocked = false;
         QuizQuestion q = currentQuizQuestions.get(currentQIndex);
         quizHeader.setText("Question " + (currentQIndex + 1) + "/" + currentQuizQuestions.size());
         quizPointsCurrent.setText(activeTournament == null ? ("Winning: " + coinsEarnedInQuiz + " Coins") : "🏆 Tournament Match Live");
@@ -841,7 +865,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void submitAnswer(int idx) {
-        if (!quizActive || currentQIndex >= currentQuizQuestions.size()) return;
+        if (!quizActive || answerLocked || currentQIndex >= currentQuizQuestions.size()) return;
+        answerLocked = true;
         if (countDownTimer != null) countDownTimer.cancel();
         for (Button b : btnOpts) b.setEnabled(false);
         QuizQuestion q = currentQuizQuestions.get(currentQIndex);
@@ -855,11 +880,47 @@ public class MainActivity extends AppCompatActivity {
         if (idx == q.ansIdx) {
             if (idx >= 0) setOptionColor(btnOpts[idx], R.color.correct_answer, R.color.correct_answer, R.color.text_primary);
             correctAnswersCount++;
-            if (activeTournament == null) coinsEarnedInQuiz += q.points;
+            if (activeTournament == null) coinsEarnedInQuiz += 10;
+            quizPointsCurrent.setText("+10 coins");
         } else {
             if (idx >= 0) setOptionColor(btnOpts[idx], R.color.wrong_answer, R.color.wrong_answer, R.color.text_primary);
             setOptionColor(btnOpts[q.ansIdx], R.color.correct_answer, R.color.correct_answer, R.color.text_primary);
+            quizPointsCurrent.setText("10 coins deducted");
         }
+        applyAnswerCoinDelta(q, idx == q.ansIdx);
+    }
+
+    private void applyAnswerCoinDelta(QuizQuestion question, boolean correct) {
+        if (auth.getUid() == null || quizAttemptId == null || question.id == null) {
+            advanceAfterAnswer();
+            return;
+        }
+        String answerKey = historyKey(quizAttemptId + "-" + question.id);
+        db.child("users").child(auth.getUid()).runTransaction(new Transaction.Handler() {
+            @NonNull @Override public Transaction.Result doTransaction(MutableData currentData) {
+                MutableData answer = currentData.child("quizAnswers").child(answerKey);
+                if (answer.getValue() != null) return Transaction.abort();
+                Integer currentPoints = currentData.child("points").getValue(Integer.class);
+                int balance = currentPoints == null ? 0 : Math.max(0, currentPoints);
+                int updatedBalance = correct ? balance + 10 : Math.max(0, balance - 10);
+                currentData.child("points").setValue(updatedBalance);
+                answer.child("correct").setValue(correct);
+                answer.child("delta").setValue(correct ? 10 : -10);
+                answer.child("recordedAt").setValue(ServerValue.TIMESTAMP);
+                return Transaction.success(currentData);
+            }
+            @Override public void onComplete(DatabaseError error, boolean committed, DataSnapshot snapshot) {
+                if (committed && snapshot != null) {
+                    Integer updated = snapshot.child("points").getValue(Integer.class);
+                    if (updated != null) { userCoins = Math.max(0, updated); updateCoinViews(); }
+                }
+                if (error != null) quizPointsCurrent.setText("Balance update failed");
+                advanceAfterAnswer();
+            }
+        });
+    }
+
+    private void advanceAfterAnswer() {
         new Handler().postDelayed(() -> { currentQIndex++; loadNextQuestion(); }, 1500);
     }
 
@@ -902,36 +963,9 @@ public class MainActivity extends AppCompatActivity {
         if (totalQ <= 0) return;
         recordQuizResult(totalQ);
         if (activeTournament != null) {
-            if(auth.getUid() != null) {
-                db.child("tournaments").child(activeTournament.id).child("players").child(auth.getUid()).setValue(correctAnswersCount);
-            }
-            float winRatio = (float) correctAnswersCount / totalQ;
-            int totalPool = (activeTournament.pool_size > 0) ? (activeTournament.pool_size * activeTournament.entry_points) : activeTournament.reward_points;
-            int prize = 0; String rank = "";
-            if (winRatio == 1.0f) { prize = (int) (totalPool * 0.5); rank = "1st Place"; }
-            else if (winRatio >= 0.75f) { prize = (int) (totalPool * 0.3); rank = "2nd Place"; }
-            else if (winRatio >= 0.5f) { prize = (int) (totalPool * 0.2); rank = "3rd Place"; }
-            if (prize > 0) {
-                final int finalPrize = prize;
-                final String finalRank = rank;
-                claimCoinsOnce("tournament-" + quizAttemptId, finalPrize, "Tournament Prize", null,
-                    (committed, alreadyClaimed, error) -> showResultDialog(
-                        committed ? finalRank + " Winner!" : "Reward unavailable",
-                        committed ? "You scored " + correctAnswersCount + "/" + totalQ + "!\n\nYou won " + finalPrize + " Coins from the pool!" : "The tournament reward could not be claimed. Try again later.",
-                        committed ? "🏆" : "⚠️"));
-            } else {
-                showResultDialog("Match Finished", "You scored " + correctAnswersCount + "/" + totalQ + ".\n\nBetter luck next time!", "💔");
-            }
+            showResultDialog("Tournament Complete", "You scored " + correctAnswersCount + "/" + totalQ + ".\nYour result was recorded for the free leaderboard.", "🏆");
         } else {
-            if (coinsEarnedInQuiz > 0) {
-                claimCoinsOnce("quiz-" + quizAttemptId, coinsEarnedInQuiz, "Quick Quiz Reward", null,
-                    (committed, alreadyClaimed, error) -> showResultDialog(
-                        committed ? "Good Game!" : "Reward unavailable",
-                        committed ? "You scored " + correctAnswersCount + "/" + totalQ + ".\nEarned " + coinsEarnedInQuiz + " Points!" : "The quiz reward could not be claimed. Try again later.",
-                        committed ? "🎉" : "⚠️"));
-            } else {
-                showResultDialog("Game Over", "You scored " + correctAnswersCount + "/" + totalQ + ".\nPractice more!", "📚");
-            }
+            showResultDialog("Quiz Complete", "You scored " + correctAnswersCount + "/" + totalQ + ".\nEach correct answer earned 10 coins and each wrong answer deducted up to 10 coins.", "🎉");
         }
     }
 
@@ -943,15 +977,18 @@ public class MainActivity extends AppCompatActivity {
         result.put("attemptId", quizAttemptId);
         result.put("userId", auth.getUid());
         result.put("userName", userNameStr);
-        result.put("email", auth.getCurrentUser().getEmail());
         result.put("category", activeQuickCategory != null ? activeQuickCategory.title : (activeTournament != null ? activeTournament.title : "Quiz"));
+        result.put("tournamentId", activeTournament == null ? "" : activeTournament.id);
         result.put("score", coinsEarnedInQuiz);
         result.put("correctAnswers", correctAnswersCount);
         result.put("wrongAnswers", wrongAnswers);
         result.put("totalQuestions", totalQuestions);
         result.put("percentage", percentage);
         result.put("timestamp", ServerValue.TIMESTAMP);
-        db.child("quiz_results").child(historyKey(quizAttemptId)).setValue(result);
+        result.put("completedAt", ServerValue.TIMESTAMP);
+        result.put("published", false);
+        String resultPath = activeTournament == null ? "quiz_results" : "tournament_attempts";
+        db.child(resultPath).child(historyKey(quizAttemptId)).setValue(result);
     }
 
     class QuickCategoryAdapter extends RecyclerView.Adapter<QuickCategoryAdapter.VH> {
@@ -974,7 +1011,7 @@ public class MainActivity extends AppCompatActivity {
         @NonNull @Override public VH onCreateViewHolder(@NonNull ViewGroup p, int t) { return new VH(LayoutInflater.from(p.getContext()).inflate(R.layout.item_tournament, p, false)); }
         @Override public void onBindViewHolder(@NonNull VH h, int pos) {
             Tournament t = list.get(pos); h.tTitle.setText(t.title);
-            h.tDetails.setText("Entry: " + t.entry_points + " 🪙 | Players: " + t.playedCount + (t.pool_size > 0 ? ("/" + t.pool_size) : ""));
+            h.tDetails.setText(t.status + " | FREE | " + t.category + " | " + t.totalQuestions + " questions");
             
             // 3D Realistic Golden Cup pulse animation
             Animation pulse = AnimationUtils.loadAnimation(h.itemView.getContext(), R.anim.pulse_anim);
@@ -982,8 +1019,6 @@ public class MainActivity extends AppCompatActivity {
 
             if (t.hasPlayed) {
                 h.btnPlay.setText("PLAYED"); h.btnPlay.setEnabled(false); h.btnPlay.setBackgroundColor(0xFF3B2A5E); h.btnPlay.setTextColor(0xFF7A6B99);
-            } else if (t.pool_size > 0 && t.playedCount >= t.pool_size) {
-                h.btnPlay.setText("FULL"); h.btnPlay.setEnabled(false); h.btnPlay.setBackgroundColor(0xFF3B2A5E); h.btnPlay.setTextColor(0xFF7A6B99);
             } else {
                 h.btnPlay.setText("JOIN"); h.btnPlay.setEnabled(true); h.btnPlay.setBackgroundResource(R.drawable.bg_btn_gold); h.btnPlay.setTextColor(0xFF2A1B00);
             }
@@ -1011,7 +1046,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public static class User { public String username, email, photoUrl; public int points; public User(){} public User(String u, String e, String pic, int p){username=u; email=e; photoUrl=pic; points=p;} }
-    public static class Tournament { public String id, title, status, icon; public int entry_points, reward_points, pool_size, playedCount; public boolean hasPlayed; public Tournament(){} }
+    public static class Tournament { public String id, title, description, category, status, icon, createdBy; public int totalQuestions, entry_points, reward_points, pool_size, playedCount; public long startTime, endTime, createdAt; public boolean published, hasPlayed; public Tournament(){} }
     class QuizQuestion {
         String id, q; String[] opts = new String[4]; int ansIdx, points;
         QuizQuestion(String qu, String a, String b, String c, String d, int ans, int pts) { this(null, qu, a, b, c, d, ans, pts); }

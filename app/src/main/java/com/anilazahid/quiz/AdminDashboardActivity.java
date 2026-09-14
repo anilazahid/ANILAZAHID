@@ -16,6 +16,7 @@ public class AdminDashboardActivity extends AdminBaseActivity {
         findViewById(R.id.adminCategoriesCard).setOnClickListener(v -> open(AdminCategoriesActivity.class));
         findViewById(R.id.adminQuestionsCard).setOnClickListener(v -> open(AdminQuestionsActivity.class));
         findViewById(R.id.adminResultsCard).setOnClickListener(v -> open(AdminResultsActivity.class));
+        findViewById(R.id.adminTournamentsCard).setOnClickListener(v -> open(AdminTournamentsActivity.class));
         findViewById(R.id.adminSettingsCard).setOnClickListener(v -> open(AdminSettingsActivity.class));
         findViewById(R.id.adminLogout).setOnClickListener(v -> logoutAdmin());
     }

@@ -19,8 +19,15 @@
     "quiz_results": {
       "$resultId": {
         ".read": "auth != null && root.child('admin_users').child(auth.uid).val() == true",
-        ".write": "auth != null && ((!data.exists() && newData.child('userId').val() == auth.uid) || root.child('admin_users').child(auth.uid).val() == true)",
-        ".validate": "newData.hasChildren(['attemptId', 'userId', 'category', 'totalQuestions', 'correctAnswers', 'wrongAnswers', 'score', 'percentage', 'timestamp']) && newData.child('userId').val() == auth.uid && newData.child('totalQuestions').isNumber() && newData.child('correctAnswers').isNumber() && newData.child('wrongAnswers').isNumber() && newData.child('percentage').isNumber()"
+        ".write": "auth != null && (root.child('admin_users').child(auth.uid).val() == true || (!data.exists() && newData.child('userId').val() == auth.uid))",
+        ".validate": "newData.hasChildren(['attemptId', 'userId', 'category', 'totalQuestions', 'correctAnswers', 'wrongAnswers', 'score', 'percentage', 'timestamp']) && (root.child('admin_users').child(auth.uid).val() == true || newData.child('userId').val() == auth.uid) && newData.child('totalQuestions').isNumber() && newData.child('correctAnswers').isNumber() && newData.child('wrongAnswers').isNumber() && newData.child('percentage').isNumber()"
+      }
+    },
+    "tournament_attempts": {
+      "$attemptId": {
+        ".read": "auth != null && root.child('admin_users').child(auth.uid).val() == true",
+        ".write": "auth != null && (root.child('admin_users').child(auth.uid).val() == true || (!data.exists() && newData.child('userId').val() == auth.uid))",
+        ".validate": "newData.hasChildren(['attemptId', 'userId', 'tournamentId', 'score', 'correctAnswers', 'wrongAnswers', 'totalQuestions', 'percentage', 'completedAt']) && (root.child('admin_users').child(auth.uid).val() == true || newData.child('userId').val() == auth.uid)"
       }
     },
     "admin_settings": {
