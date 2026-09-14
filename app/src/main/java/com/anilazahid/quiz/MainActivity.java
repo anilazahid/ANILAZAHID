@@ -557,43 +557,41 @@ public class MainActivity extends AppCompatActivity {
                 quickCategoriesLoaded = true;
                 quickCategoryList.clear();
                 List<QuizBank.StarterCategory> starterCategories = QuizBank.categories();
-                Set<String> existingTitles = new HashSet<>();
+                Map<String, DataSnapshot> firebaseCategories = new HashMap<>();
                 if (snap.exists()) {
                     for (DataSnapshot dSnap : snap.getChildren()) {
                         String title = dSnap.child("title").getValue(String.class);
-                        String icon = dSnap.child("icon").getValue(String.class);
-                        existingTitles.add(title != null ? title : "");
-                        List<QuizQuestion> qList = new ArrayList<>();
-                        DataSnapshot qSnap = dSnap.child("questions");
-                        if (qSnap.exists()) {
-                            for (DataSnapshot qs : qSnap.getChildren()) {
-                                String q = qs.child("q").getValue(String.class);
-                                String o1 = qs.child("opt1").getValue(String.class);
-                                String o2 = qs.child("opt2").getValue(String.class);
-                                String o3 = qs.child("opt3").getValue(String.class);
-                                String o4 = qs.child("opt4").getValue(String.class);
-                                Integer ans = qs.child("ansIdx").getValue(Integer.class);
-                                if (ans == null) ans = answerIndex(qs.child("correctAnswer").getValue(String.class));
-                                if(q != null && o1 != null && o2 != null && o3 != null && o4 != null) qList.add(new QuizQuestion(qs.getKey(), q, o1, o2, o3, o4, ans != null ? ans : 0, 10));
-                            }
+                        if (findStarterCategory(starterCategories, title) != null && !firebaseCategories.containsKey(title)) {
+                            firebaseCategories.put(title, dSnap);
                         }
-                        QuizBank.StarterCategory matchingStarter = findStarterCategory(starterCategories, title);
-                        if (qList.isEmpty() && matchingStarter != null) {
-                            qList.addAll(starterQuestions(matchingStarter));
-                            seedQuestions(dSnap.getKey(), matchingStarter);
-                        }
-                        while (qList.size() < 10) qList.add(new QuizQuestion((title != null ? title : "Quiz") + " Question " + (qList.size() + 1) + "?", "Option A", "Option B", "Option C", "Option D", 0, 10));
-                        quickCategoryList.add(new QuickCategory(dSnap.getKey(), title != null ? title : "General", icon != null && !icon.isEmpty() ? icon : "🧩", qList));
                     }
                 }
-                List<QuizBank.StarterCategory> missing = new ArrayList<>();
                 for (QuizBank.StarterCategory starter : starterCategories) {
-                    if (!existingTitles.contains(starter.title)) {
-                        quickCategoryList.add(new QuickCategory(starterKey(starter.title), starter.title, starter.icon, starterQuestions(starter)));
-                        missing.add(starter);
+                    DataSnapshot firebaseCategory = firebaseCategories.get(starter.title);
+                    List<QuizQuestion> questions = firebaseCategory == null
+                            ? starterQuestions(starter)
+                            : firebaseQuestions(firebaseCategory);
+                    List<String[]> missingQuestions = new ArrayList<>();
+                    Set<String> existingQuestionTexts = new HashSet<>();
+                    for (QuizQuestion question : questions) existingQuestionTexts.add(question.q);
+                    for (int index = 0; index < starter.questions.length && questions.size() < 20; index++) {
+                        String[] item = starter.questions[index];
+                        if (existingQuestionTexts.add(item[0])) {
+                            questions.add(new QuizQuestion(starterKey(starter.title) + "-q" + index,
+                                    item[0], item[1], item[2], item[3], item[4], Integer.parseInt(item[5]), 10));
+                            missingQuestions.add(item);
+                        }
                     }
+                    if (firebaseCategory == null) {
+                        seedStarterCategories(Collections.singletonList(starter));
+                    } else if (!missingQuestions.isEmpty()) {
+                        seedQuestions(firebaseCategory.getKey(), missingQuestions);
+                    }
+                    String categoryId = firebaseCategory == null ? starterKey(starter.title) : firebaseCategory.getKey();
+                    String icon = firebaseCategory == null ? starter.icon : firebaseCategory.child("icon").getValue(String.class);
+                    quickCategoryList.add(new QuickCategory(categoryId, starter.title,
+                            icon == null || icon.isEmpty() ? starter.icon : icon, questions));
                 }
-                if (!missing.isEmpty()) seedStarterCategories(missing);
                 recyclerCategories.setAdapter(new QuickCategoryAdapter(quickCategoryList));
             }
             @Override public void onCancelled(@NonNull DatabaseError error) {
@@ -623,6 +621,26 @@ public class MainActivity extends AppCompatActivity {
         return questions;
     }
 
+    private List<QuizQuestion> firebaseQuestions(DataSnapshot category) {
+        List<QuizQuestion> questions = new ArrayList<>();
+        DataSnapshot questionSnapshot = category.child("questions");
+        for (DataSnapshot question : questionSnapshot.getChildren()) {
+            String text = question.child("q").getValue(String.class);
+            String optionA = question.child("opt1").getValue(String.class);
+            String optionB = question.child("opt2").getValue(String.class);
+            String optionC = question.child("opt3").getValue(String.class);
+            String optionD = question.child("opt4").getValue(String.class);
+            Integer answer = question.child("ansIdx").getValue(Integer.class);
+            if (answer == null) answer = answerIndex(question.child("correctAnswer").getValue(String.class));
+            answer = Math.max(0, Math.min(3, answer));
+            if (text != null && optionA != null && optionB != null && optionC != null && optionD != null) {
+                questions.add(new QuizQuestion(question.getKey(), text, optionA, optionB, optionC, optionD,
+                        answer, 10));
+            }
+        }
+        return questions;
+    }
+
     private Map<String, Object> starterQuestionData(String[] item) {
         Map<String, Object> data = new HashMap<>();
         data.put("q", item[0]); data.put("opt1", item[1]); data.put("opt2", item[2]);
@@ -631,9 +649,9 @@ public class MainActivity extends AppCompatActivity {
         return data;
     }
 
-    private void seedQuestions(String categoryKey, QuizBank.StarterCategory category) {
+    private void seedQuestions(String categoryKey, List<String[]> questions) {
         if (categoryKey == null) return;
-        for (String[] item : category.questions) db.child("quick_categories").child(categoryKey).child("questions").push().setValue(starterQuestionData(item));
+        for (String[] item : questions) db.child("quick_categories").child(categoryKey).child("questions").push().setValue(starterQuestionData(item));
     }
 
     private void seedStarterCategories(List<QuizBank.StarterCategory> categories) {
