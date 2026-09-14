@@ -884,7 +884,7 @@ public class MainActivity extends AppCompatActivity {
                             String o3 = qSnap.child("opt3").getValue(String.class); String o4 = qSnap.child("opt4").getValue(String.class);
                             Integer ans = qSnap.child("ansIdx").getValue(Integer.class);
                             Integer pts = qSnap.child("points").getValue(Integer.class);
-                            if (q != null && o1 != null) currentQuizQuestions.add(new QuizQuestion(qSnap.getKey(), q, o1, o2, o3, o4, ans != null ? ans : 0, pts != null ? pts : 50));
+                              if (q != null && o1 != null && o2 != null && o3 != null && o4 != null) currentQuizQuestions.add(new QuizQuestion(qSnap.getKey(), q, o1, o2, o3, o4, ans != null ? ans : 0, pts != null ? pts : 50));
                         }
                     }
                     if (currentQuizQuestions.isEmpty()) {
@@ -898,7 +898,16 @@ public class MainActivity extends AppCompatActivity {
                     }
                     launchQuizUI();
                 }
-                @Override public void onCancelled(@NonNull DatabaseError error) { launchQuizUI(); }
+                  @Override public void onCancelled(@NonNull DatabaseError error) {
+                      for (String[] item : QuizBank.tournamentQuestions(t.id, Math.max(10, t.totalQuestions))) {
+                          currentQuizQuestions.add(new QuizQuestion(item[0], item[1], item[2], item[3], item[4], Integer.parseInt(item[5]), 50));
+                      }
+                      if (currentQuizQuestions.isEmpty()) {
+                          Toast.makeText(MainActivity.this, "Tournament questions are unavailable right now.", Toast.LENGTH_SHORT).show();
+                          return;
+                      }
+                      launchQuizUI();
+                  }
             });
         }
     }
