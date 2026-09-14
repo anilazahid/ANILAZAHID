@@ -66,6 +66,7 @@ public class AdminTournamentsActivity extends AdminBaseActivity {
             Long start = item.child("startTime").getValue(Long.class);
             Long end = item.child("endTime").getValue(Long.class);
             if (!Boolean.TRUE.equals(published) || start == null || end == null) continue;
+            if (start <= 0 || end <= start) continue;
             if (start > now) upcoming++;
             else if (end > now) ongoing++;
             else completed++;
@@ -124,7 +125,9 @@ public class AdminTournamentsActivity extends AdminBaseActivity {
                 data.put("startTime", start); data.put("endTime", end); data.put("status", status(start, end));
                 data.put("published", old != null && Boolean.TRUE.equals(old.child("published").getValue(Boolean.class)));
                 data.put("createdBy", auth.getUid()); data.put("createdAt", ServerValue.TIMESTAMP);
-                db.child("tournaments").child(old == null ? db.child("tournaments").push().getKey() : old.getKey()).updateChildren(data)
+                String tournamentId = old == null ? db.child("tournaments").push().getKey() : old.getKey();
+                if (old == null) data.put("questions", tournamentQuestionData(tournamentId, questions));
+                db.child("tournaments").child(tournamentId).updateChildren(data)
                         .addOnSuccessListener(done -> { toast("Tournament saved."); dialog.dismiss(); })
                         .addOnFailureListener(error -> toast("Could not save tournament."));
             } catch (RuntimeException error) { toast("Use valid values. End time must be after start time."); }
@@ -156,12 +159,12 @@ public class AdminTournamentsActivity extends AdminBaseActivity {
                 for (int index = 1; index <= 100; index++) {
                     QuizBank.StarterCategory category = categories.get((index - 1) % categories.size());
                     String id = String.format(Locale.US, "championship-%03d", index);
-                    updates.put(id, tournament(id, "Quiz Championship #" + String.format(Locale.US, "%03d", index), category.title, 10, now - 86400000L, now + 30L * 86400000L, true));
+                    addTournamentSeed(updates, snapshot, id, "Quiz Championship #" + String.format(Locale.US, "%03d", index), category.title, 10, now - 86400000L, now + 30L * 86400000L, true);
                 }
                 for (int index = 1; index <= 20; index++) {
                     QuizBank.StarterCategory category = categories.get((index - 1) % categories.size());
                     String id = String.format(Locale.US, "challenge-upcoming-%03d", index);
-                    updates.put(id, tournament(id, "Quiz Challenge #" + String.format(Locale.US, "%03d", index), category.title, 10, now + index * 86400000L, now + (index + 2L) * 86400000L, true));
+                    addTournamentSeed(updates, snapshot, id, "Quiz Challenge #" + String.format(Locale.US, "%03d", index), category.title, 10, now + index * 86400000L, now + (index + 2L) * 86400000L, true);
                 }
                 db.child("tournaments").updateChildren(updates).addOnSuccessListener(done -> {
                     verifySeedResult();
@@ -192,7 +195,7 @@ public class AdminTournamentsActivity extends AdminBaseActivity {
                     Long start = item.child("startTime").getValue(Long.class);
                     Long end = item.child("endTime").getValue(Long.class);
                     if (!Boolean.TRUE.equals(published) || start == null || end == null) continue;
-                    if (start <= now && end > now) ongoing++;
+                    if (start > 0 && end > start && start <= now && end > now) ongoing++;
                     else if (start > now) upcoming++;
                 }
                 seeding = false;
@@ -210,6 +213,58 @@ public class AdminTournamentsActivity extends AdminBaseActivity {
         data.put("tournamentId", id); data.put("title", title); data.put("description", "Free quiz competition for points and rankings.");
         data.put("category", category); data.put("totalQuestions", questions); data.put("startTime", start); data.put("endTime", end);
         data.put("status", status(start, end)); data.put("published", published); data.put("entry_points", 0); data.put("createdBy", auth.getUid()); data.put("createdAt", ServerValue.TIMESTAMP);
+        data.put("questions", tournamentQuestionData(id, questions));
+        return data;
+    }
+
+    private Map<String, Object> tournamentQuestionData(String id, int questions) {
+        Map<String, Object> questionData = new HashMap<>();
+        int questionIndex = 1;
+        for (String[] item : QuizBank.tournamentQuestions(id, Math.max(10, questions))) {
+            questionData.put(String.format(Locale.US, "question-%02d", questionIndex++), question(item));
+        }
+        return questionData;
+    }
+
+    private void addTournamentSeed(Map<String, Object> updates, DataSnapshot snapshot, String id, String title, String category, int questions, long start, long end, boolean published) {
+        Map<String, Object> data = tournament(id, title, category, questions, start, end, published);
+        DataSnapshot existing = snapshot.child(id);
+        if (!existing.exists()) {
+            updates.put(id, data);
+            return;
+        }
+        data.remove("questions");
+        updates.put(id, data);
+        int validQuestions = 0;
+        for (DataSnapshot child : existing.child("questions").getChildren()) {
+            if (hasQuestionFields(child)) validQuestions++;
+        }
+        int questionIndex = 1;
+        for (String[] item : QuizBank.tournamentQuestions(id, questions)) {
+            if (validQuestions >= questions) break;
+            String key = String.format(Locale.US, "question-%02d", questionIndex++);
+            if (!existing.child("questions").child(key).exists()) {
+                updates.put(id + "/questions/" + key, question(item));
+                validQuestions++;
+            }
+        }
+    }
+
+    private boolean hasQuestionFields(DataSnapshot question) {
+        return question.child("q").getValue(String.class) != null
+                && question.child("opt1").getValue(String.class) != null
+                && question.child("opt2").getValue(String.class) != null
+                && question.child("opt3").getValue(String.class) != null
+                && question.child("opt4").getValue(String.class) != null
+                && question.child("ansIdx").getValue(Integer.class) != null;
+    }
+
+    private Map<String, Object> question(String[] item) {
+        Map<String, Object> data = new HashMap<>();
+        int answer = Integer.parseInt(item[5]);
+        data.put("q", item[0]); data.put("opt1", item[1]); data.put("opt2", item[2]);
+        data.put("opt3", item[3]); data.put("opt4", item[4]); data.put("ansIdx", answer);
+        data.put("correctAnswer", String.valueOf((char) ('A' + answer))); data.put("points", 50);
         return data;
     }
 

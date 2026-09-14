@@ -60,7 +60,8 @@ public class MainActivity extends AppCompatActivity {
     private BottomNavigationView bottomNav;
     private RecyclerView recyclerCategories, recyclerTournamentsFull, recyclerTournamentsUpcoming, recyclerTournamentsCompleted, recyclerLeaderboardFull;
     private ProgressBar categoriesProgress, tournamentsProgress, leaderboardProgress;
-    private TextView tournamentsEmpty, upcomingEmpty;
+    private TextView tournamentsEmpty, upcomingEmpty, ongoingSectionTitle, upcomingSectionTitle, completedSectionTitle;
+    private TextView tournamentTabOngoing, tournamentTabUpcoming, tournamentTabCompleted;
 
     private View quizContainer, quizTopicBanner;
     private TextView quizHeader, quizPointsCurrent, tvQuestion, tvTimer, quizTopicIcon, quizTopicName;
@@ -212,6 +213,13 @@ public class MainActivity extends AppCompatActivity {
         tournamentsProgress = findViewById(R.id.tournamentsLoading);
         tournamentsEmpty = findViewById(R.id.tournamentsEmpty);
         upcomingEmpty = findViewById(R.id.upcomingTournamentsEmpty);
+        ongoingSectionTitle = findViewById(R.id.ongoingSectionTitle);
+        upcomingSectionTitle = findViewById(R.id.upcomingSectionTitle);
+        completedSectionTitle = findViewById(R.id.completedSectionTitle);
+        tournamentTabOngoing = findViewById(R.id.tournamentTabOngoing);
+        tournamentTabUpcoming = findViewById(R.id.tournamentTabUpcoming);
+        tournamentTabCompleted = findViewById(R.id.tournamentTabCompleted);
+        showTournamentSection("ONGOING");
         leaderboardProgress = findViewById(R.id.leaderboardLoading);
 
         quizContainer = findViewById(R.id.kbcQuizContainer); quizHeader = findViewById(R.id.quizHeader);
@@ -245,6 +253,9 @@ public class MainActivity extends AppCompatActivity {
         });
         findViewById(R.id.btnDailyClaim).setOnClickListener(v -> claimDailyReward());
         if (dailyRewardClaim != null) dailyRewardClaim.setOnClickListener(v -> claimDailyReward());
+        tournamentTabOngoing.setOnClickListener(v -> showTournamentSection("ONGOING"));
+        tournamentTabUpcoming.setOnClickListener(v -> showTournamentSection("UPCOMING"));
+        tournamentTabCompleted.setOnClickListener(v -> showTournamentSection("ENDED"));
         
         // Profile features listeners
         findViewById(R.id.btnEditProfile).setOnClickListener(v -> showEditProfileDialog());
@@ -635,7 +646,7 @@ public class MainActivity extends AppCompatActivity {
                             t.hasPlayed = auth.getUid() != null && ds.child("players").hasChild(auth.getUid());
                             if ("UPCOMING".equals(t.status)) upcoming.add(t);
                             else if ("ENDED".equals(t.status)) completed.add(t);
-                            else tournamentList.add(t);
+                            else if ("ONGOING".equals(t.status)) tournamentList.add(t);
                         }
                     }
                 }
@@ -647,6 +658,7 @@ public class MainActivity extends AppCompatActivity {
                 recyclerTournamentsFull.setAdapter(new TournamentFullAdapter(tournamentList));
                 recyclerTournamentsUpcoming.setAdapter(new TournamentFullAdapter(upcoming));
                 recyclerTournamentsCompleted.setAdapter(new TournamentFullAdapter(completed));
+                showTournamentSection("ONGOING");
             }
             @Override public void onCancelled(@NonNull DatabaseError e) {
                 tournamentsLoading = false;
@@ -663,13 +675,31 @@ public class MainActivity extends AppCompatActivity {
 
     private void setTournamentStatus(Tournament tournament) {
         long now = System.currentTimeMillis();
-        if (tournament.startTime > 0 && now < tournament.startTime) {
+        if (tournament.startTime <= 0 || tournament.endTime <= 0 || tournament.endTime <= tournament.startTime) {
+            tournament.status = "INVALID";
+        } else if (now < tournament.startTime) {
             tournament.status = "UPCOMING";
-        } else if (tournament.endTime > 0 && now >= tournament.endTime) {
+        } else if (now >= tournament.endTime) {
             tournament.status = "ENDED";
         } else {
             tournament.status = "ONGOING";
         }
+    }
+
+    private void showTournamentSection(String status) {
+        boolean ongoing = "ONGOING".equals(status);
+        boolean upcoming = "UPCOMING".equals(status);
+        recyclerTournamentsFull.setVisibility(ongoing ? View.VISIBLE : View.GONE);
+        recyclerTournamentsUpcoming.setVisibility(upcoming ? View.VISIBLE : View.GONE);
+        recyclerTournamentsCompleted.setVisibility(!ongoing && !upcoming ? View.VISIBLE : View.GONE);
+        tournamentsEmpty.setVisibility(ongoing && tournamentList.isEmpty() ? View.VISIBLE : View.GONE);
+        upcomingEmpty.setVisibility(upcoming ? upcomingEmpty.getVisibility() : View.GONE);
+        ongoingSectionTitle.setVisibility(ongoing ? View.VISIBLE : View.GONE);
+        upcomingSectionTitle.setVisibility(upcoming ? View.VISIBLE : View.GONE);
+        completedSectionTitle.setVisibility(!ongoing && !upcoming ? View.VISIBLE : View.GONE);
+        tournamentTabOngoing.setBackgroundResource(ongoing ? R.drawable.bg_tab_active : R.drawable.bg_tab_container);
+        tournamentTabUpcoming.setBackgroundResource(upcoming ? R.drawable.bg_tab_active : R.drawable.bg_tab_container);
+        tournamentTabCompleted.setBackgroundResource(!ongoing && !upcoming ? R.drawable.bg_tab_active : R.drawable.bg_tab_container);
     }
 
     private void loadQuickCategoriesFromFirebase() {
@@ -830,7 +860,15 @@ public class MainActivity extends AppCompatActivity {
                             if (q != null && o1 != null) currentQuizQuestions.add(new QuizQuestion(qSnap.getKey(), q, o1, o2, o3, o4, ans != null ? ans : 0, pts != null ? pts : 50));
                         }
                     }
-                    if(currentQuizQuestions.isEmpty()) currentQuizQuestions.add(new QuizQuestion("Tournament Question 1?", "A", "B", "C", "D", 0, 50));
+                    if (currentQuizQuestions.isEmpty()) {
+                        for (String[] item : QuizBank.tournamentQuestions(t.id, Math.max(10, t.totalQuestions))) {
+                            currentQuizQuestions.add(new QuizQuestion(item[0], item[1], item[2], item[3], item[4], Integer.parseInt(item[5]), 50));
+                        }
+                    }
+                    if (currentQuizQuestions.isEmpty()) {
+                        Toast.makeText(MainActivity.this, "Tournament questions are unavailable right now.", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
                     launchQuizUI();
                 }
                 @Override public void onCancelled(@NonNull DatabaseError error) { launchQuizUI(); }

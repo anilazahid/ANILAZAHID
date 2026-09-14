@@ -354,4 +354,23 @@ public final class QuizBank {
         }));
         return categories;
     }
+
+    public static List<String[]> tournamentQuestions(String tournamentId, int count) {
+        List<String[]> bank = new ArrayList<>();
+        for (StarterCategory category : categories()) {
+            for (String[] question : category.questions) bank.add(question);
+        }
+        List<String[]> selected = new ArrayList<>();
+        if (bank.isEmpty() || count <= 0) return selected;
+        int offset = Math.floorMod(tournamentId == null ? 0 : tournamentId.hashCode(), bank.size());
+        for (int step = 0; selected.size() < count && step < bank.size() * 2; step++) {
+            String[] question = bank.get((offset + step) % bank.size());
+            boolean duplicate = false;
+            for (String[] existing : selected) {
+                if (existing[0].equals(question[0])) { duplicate = true; break; }
+            }
+            if (!duplicate) selected.add(question);
+        }
+        return selected;
+    }
 }
