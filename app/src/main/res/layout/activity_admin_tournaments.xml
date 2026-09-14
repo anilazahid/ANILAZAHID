@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="@color/bg_app">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical">
+        <TextView
+            android:id="@+id/adminTournamentTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="TOURNAMENT MANAGEMENT"
+            android:textColor="@color/gold"
+            android:textSize="21sp"
+            android:textStyle="bold" />
+        <Button
+            android:id="@+id/adminTournamentBack"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="BACK"
+            android:textColor="@color/gold_text_dark"
+            android:background="@drawable/bg_btn_gold" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="12dp">
+        <TextView
+            android:id="@+id/adminOngoingCount"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="ONGOING\n0"
+            android:textColor="@color/text_primary"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:background="@drawable/bg_card"
+            android:padding="12dp" />
+        <TextView
+            android:id="@+id/adminUpcomingCount"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:gravity="center"
+            android:text="UPCOMING\n0"
+            android:textColor="@color/text_primary"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:background="@drawable/bg_card"
+            android:padding="12dp" />
+        <TextView
+            android:id="@+id/adminCompletedCount"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:gravity="center"
+            android:text="COMPLETED\n0"
+            android:textColor="@color/text_primary"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:background="@drawable/bg_card"
+            android:padding="12dp" />
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/adminSeedTournaments"
+        android:layout_width="match_parent"
+        android:layout_height="54dp"
+        android:layout_marginTop="12dp"
+        android:text="SEED 120 TOURNAMENTS"
+        android:textColor="@color/gold_text_dark"
+        android:textStyle="bold"
+        android:background="@drawable/bg_btn_gold" />
+
+    <Button
+        android:id="@+id/adminCreateTournament"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="8dp"
+        android:text="CREATE TOURNAMENT"
+        android:textColor="@color/gold_text_dark"
+        android:background="@drawable/bg_btn_gold" />
+
+    <TextView
+        android:id="@+id/adminTournamentStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:textColor="@color/text_secondary"
+        android:padding="8dp"
+        android:visibility="gone" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/adminTournamentRecycler"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="4dp" />
+</LinearLayout>

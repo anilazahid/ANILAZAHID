@@ -26,21 +26,18 @@ public class AdminTournamentsActivity extends AdminBaseActivity {
     private final List<DataSnapshot> tournaments = new ArrayList<>();
     private TournamentAdapter adapter;
     private android.widget.Button seedButton;
+    private TextView statusView;
     private boolean seeding;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
-        setContentView(R.layout.activity_admin_list);
-        ((TextView) findViewById(R.id.adminListTitle)).setText("TOURNAMENT MANAGEMENT");
-        ((android.widget.Button) findViewById(R.id.adminListAdd)).setText("CREATE");
-        findViewById(R.id.adminListAdd).setOnClickListener(v -> editTournament(null));
-        seedButton = new android.widget.Button(this);
-        seedButton.setText("SEED 120 TOURNAMENTS");
+        setContentView(R.layout.activity_admin_tournaments);
+        seedButton = findViewById(R.id.adminSeedTournaments);
+        statusView = findViewById(R.id.adminTournamentStatus);
         seedButton.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle("SEED TOURNAMENTS?").setMessage("Create or repair 100 ongoing and 20 upcoming free tournaments across the 15 official categories.").setNegativeButton("CANCEL", null).setPositiveButton("SEED", (d, w) -> seedInitialTournaments()).show());
-        ((ViewGroup) findViewById(R.id.adminListTitle).getParent()).addView(seedButton, 1, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        findViewById(R.id.adminListSearch).setVisibility(View.GONE);
-        findViewById(R.id.adminListBack).setOnClickListener(v -> finish());
-        RecyclerView list = findViewById(R.id.adminRecycler);
+        findViewById(R.id.adminCreateTournament).setOnClickListener(v -> editTournament(null));
+        findViewById(R.id.adminTournamentBack).setOnClickListener(v -> finish());
+        RecyclerView list = findViewById(R.id.adminTournamentRecycler);
         list.setLayoutManager(new LinearLayoutManager(this));
         adapter = new TournamentAdapter();
         list.setAdapter(adapter);
@@ -52,10 +49,38 @@ public class AdminTournamentsActivity extends AdminBaseActivity {
             @Override public void onDataChange(DataSnapshot snapshot) {
                 tournaments.clear();
                 for (DataSnapshot item : snapshot.getChildren()) tournaments.add(item);
+                updateCounts(snapshot);
                 adapter.notifyDataSetChanged();
             }
-            @Override public void onCancelled(DatabaseError error) { toast("Could not load tournaments."); }
+            @Override public void onCancelled(DatabaseError error) { showStatus("Could not load tournaments: " + error.getMessage()); }
         });
+    }
+
+    private void updateCounts(DataSnapshot snapshot) {
+        int ongoing = 0;
+        int upcoming = 0;
+        int completed = 0;
+        long now = System.currentTimeMillis();
+        for (DataSnapshot item : snapshot.getChildren()) {
+            Boolean published = item.child("published").getValue(Boolean.class);
+            Long start = item.child("startTime").getValue(Long.class);
+            Long end = item.child("endTime").getValue(Long.class);
+            if (!Boolean.TRUE.equals(published) || start == null || end == null) continue;
+            if (start > now) upcoming++;
+            else if (end > now) ongoing++;
+            else completed++;
+        }
+        ((TextView) findViewById(R.id.adminOngoingCount)).setText("ONGOING\n" + ongoing);
+        ((TextView) findViewById(R.id.adminUpcomingCount)).setText("UPCOMING\n" + upcoming);
+        ((TextView) findViewById(R.id.adminCompletedCount)).setText("COMPLETED\n" + completed);
+    }
+
+    private void showStatus(String message) {
+        if (statusView != null) {
+            statusView.setText(message);
+            statusView.setVisibility(View.VISIBLE);
+        }
+        toast(message);
     }
 
     private EditText field(LinearLayout form, String hint) {
@@ -121,7 +146,8 @@ public class AdminTournamentsActivity extends AdminBaseActivity {
         if (seeding) return;
         seeding = true;
         seedButton.setEnabled(false);
-        seedButton.setText("SEEDING...");
+        seedButton.setText("SEEDING TOURNAMENTS...");
+        showStatus("Seeding tournaments...");
         List<QuizBank.StarterCategory> categories = QuizBank.categories();
         db.child("tournaments").addListenerForSingleValueEvent(new ValueEventListener() {
             @Override public void onDataChange(DataSnapshot snapshot) {
@@ -149,7 +175,7 @@ public class AdminTournamentsActivity extends AdminBaseActivity {
         seeding = false;
         seedButton.setEnabled(true);
         seedButton.setText("SEED 120 TOURNAMENTS");
-        toast("Seeding failed: " + (message == null ? "Firebase permission denied." : message));
+        showStatus("Seeding failed: " + (message == null ? "Firebase permission denied." : message));
     }
 
     private void verifySeedResult() {
@@ -172,7 +198,8 @@ public class AdminTournamentsActivity extends AdminBaseActivity {
                 seeding = false;
                 seedButton.setEnabled(true);
                 seedButton.setText("SEED 120 TOURNAMENTS");
-                toast(ongoing + " ongoing + " + upcoming + " upcoming tournaments ready.");
+                updateCounts(snapshot);
+                showStatus(ongoing + " ongoing + " + upcoming + " upcoming tournaments ready.");
             }
             @Override public void onCancelled(DatabaseError error) { finishSeedWithError(error.getMessage()); }
         });
