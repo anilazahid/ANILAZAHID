@@ -2,6 +2,7 @@ package com.anilazahid.quiz;
 
 import android.app.Dialog;
 import android.content.Intent;
+import android.net.Uri;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -45,6 +46,7 @@ public class MainActivity extends AppCompatActivity {
     private RewardedAd mRewardedAd;
     private InterstitialAd mInterstitialAd;
     private AdView mAdView;
+    private AdView quizAdView;
 
     private View authView, mainAppView, pageHome, pageCategories, pageRank, pageProfile;
     private EditText authUser, authEmail, authPass;
@@ -87,6 +89,20 @@ public class MainActivity extends AppCompatActivity {
     private boolean tournamentsLoading;
     private boolean leaderboardLoading;
     private boolean quickCategoriesLoading;
+    private boolean quizActive;
+    private String quizAttemptId;
+
+    private final ActivityResultLauncher<String[]> profilePicturePicker = registerForActivityResult(
+            new ActivityResultContracts.OpenDocument(), uri -> {
+                if (uri == null || auth.getUid() == null) return;
+                try {
+                    getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                } catch (SecurityException ignored) {
+                }
+                displayProfilePicture(uri.toString());
+                db.child("users").child(auth.getUid()).child("photoUrl").setValue(uri.toString())
+                        .addOnFailureListener(error -> Toast.makeText(this, "Could not save profile picture.", Toast.LENGTH_SHORT).show());
+            });
 
     private static final int WATCH_AD_REWARD_COINS = 50;
 
@@ -133,6 +149,8 @@ public class MainActivity extends AppCompatActivity {
             AdRequest adRequest = new AdRequest.Builder().build();
             mAdView.loadAd(adRequest);
         }
+        quizAdView = findViewById(R.id.quizAdView);
+        if (quizAdView != null) quizAdView.loadAd(new AdRequest.Builder().build());
         
         // 3. Load Interstitial Ad
         loadInterstitialAd();
@@ -214,12 +232,14 @@ public class MainActivity extends AppCompatActivity {
         
         // Profile features listeners
         findViewById(R.id.btnEditProfile).setOnClickListener(v -> showEditProfileDialog());
+        findViewById(R.id.btnProfilePicture).setOnClickListener(v -> profilePicturePicker.launch(new String[]{"image/*"}));
+        findViewById(R.id.btnRemoveProfilePicture).setOnClickListener(v -> removeProfilePicture());
         findViewById(R.id.menuAchievements).setOnClickListener(v -> showFeatureDialog("🏅 Achievements", "• Quiz Master (Unlocked)\n• Tournament Champ (Unlocked)\n• Streak Legend (5 Days Active)\n• High Roller (500+ Coins Earned)"));
         findViewById(R.id.menuRewards).setOnClickListener(v -> showFeatureDialog("🎁 Rewards Center", "• Daily Login Bonus: Active (+20 Coins)\n• Spin & Win: Available Every 4 Hours\n• Referral Bonus: +50 Coins per Friend"));
         findViewById(R.id.menuHistory).setOnClickListener(v -> showFeatureDialog("🕐 Match History", "• Quick Quiz: +40 Points (Won)\n• Tournament Arena: +150 Points (1st Place)\n• Quick Quiz: +10 Points (Completed)"));
         findViewById(R.id.menuReferEarn).setOnClickListener(v -> showFeatureDialog("👥 Refer & Earn", "Share your invite link with friends!\n\nYour Referral Code: JAVAGOAT2026\n\nEarn 50 coins instantly when your friend joins."));
 
-        findViewById(R.id.btnCloseQuiz).setOnClickListener(v -> endQuiz());
+        findViewById(R.id.btnCloseQuiz).setOnClickListener(v -> exitQuiz());
         for (int i = 0; i < 4; i++) { final int ansIdx = i; btnOpts[i].setOnClickListener(v -> submitAnswer(ansIdx)); }
     }
 
@@ -355,12 +375,26 @@ public class MainActivity extends AppCompatActivity {
                 profEmail.setText(email != null ? email : "");
 
                 if (picUrl != null && !picUrl.isEmpty() && !isDestroyed()) {
-                    Glide.with(MainActivity.this).load(picUrl).circleCrop().into(imgUserAvatar);
-                    Glide.with(MainActivity.this).load(picUrl).circleCrop().into(imgProfileAvatar);
+                    displayProfilePicture(picUrl);
                 }
             }
             @Override public void onCancelled(@NonNull DatabaseError e) { userDataLoading = false; }
         });
+    }
+
+    private void displayProfilePicture(String pictureReference) {
+        if (pictureReference == null || pictureReference.isEmpty() || isDestroyed()) return;
+        Glide.with(this).load(Uri.parse(pictureReference)).circleCrop().into(imgUserAvatar);
+        Glide.with(this).load(Uri.parse(pictureReference)).circleCrop().into(imgProfileAvatar);
+    }
+
+    private void removeProfilePicture() {
+        if (auth.getUid() == null) return;
+        imgUserAvatar.setImageResource(R.drawable.ic_user);
+        imgProfileAvatar.setImageResource(R.drawable.ic_user);
+        db.child("users").child(auth.getUid()).child("photoUrl").setValue("")
+                .addOnSuccessListener(ignored -> Toast.makeText(this, "Profile picture removed.", Toast.LENGTH_SHORT).show())
+                .addOnFailureListener(error -> Toast.makeText(this, "Could not remove profile picture.", Toast.LENGTH_SHORT).show());
     }
 
     private void addCoins(int amount, String desc) {
@@ -764,6 +798,8 @@ public class MainActivity extends AppCompatActivity {
     private void launchQuizUI() {
         quizContainer.setVisibility(View.VISIBLE);
         currentQIndex = 0; coinsEarnedInQuiz = 0; correctAnswersCount = 0;
+        quizActive = true;
+        quizAttemptId = UUID.randomUUID().toString();
         if (activeQuickCategory != null) {
             quizTopicIcon.setText(activeQuickCategory.icon);
             quizTopicName.setText(activeQuickCategory.title);
@@ -775,7 +811,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadNextQuestion() {
-        if (currentQIndex >= currentQuizQuestions.size()) { endQuiz(); return; }
+        if (!quizActive) return;
+        if (currentQIndex >= currentQuizQuestions.size()) { completeQuiz(); return; }
         if (countDownTimer != null) countDownTimer.cancel();
         for (Button b : btnOpts) {
             b.setBackgroundResource(R.drawable.bg_option_btn);
@@ -804,6 +841,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void submitAnswer(int idx) {
+        if (!quizActive || currentQIndex >= currentQuizQuestions.size()) return;
         if (countDownTimer != null) countDownTimer.cancel();
         for (Button b : btnOpts) b.setEnabled(false);
         QuizQuestion q = currentQuizQuestions.get(currentQIndex);
@@ -840,7 +878,17 @@ public class MainActivity extends AppCompatActivity {
         dialog.show();
     }
 
-    private void endQuiz() {
+    private void exitQuiz() {
+        if (!quizActive) return;
+        if (countDownTimer != null) countDownTimer.cancel();
+        quizActive = false;
+        quizContainer.setVisibility(View.GONE);
+        currentQuizQuestions.clear();
+    }
+
+    private void completeQuiz() {
+        if (!quizActive) return;
+        quizActive = false;
         if (countDownTimer != null) countDownTimer.cancel();
         quizContainer.setVisibility(View.GONE);
         
@@ -851,6 +899,7 @@ public class MainActivity extends AppCompatActivity {
         }
         
         int totalQ = currentQuizQuestions.size();
+        if (totalQ <= 0) return;
         recordQuizResult(totalQ);
         if (activeTournament != null) {
             if(auth.getUid() != null) {
@@ -863,15 +912,23 @@ public class MainActivity extends AppCompatActivity {
             else if (winRatio >= 0.75f) { prize = (int) (totalPool * 0.3); rank = "2nd Place"; }
             else if (winRatio >= 0.5f) { prize = (int) (totalPool * 0.2); rank = "3rd Place"; }
             if (prize > 0) {
-                addCoins(prize, "Tournament Prize");
-                showResultDialog(rank + " Winner!", "You scored " + correctAnswersCount + "/" + totalQ + "!\n\nYou won " + prize + " Coins from the pool!", "🏆");
+                final int finalPrize = prize;
+                final String finalRank = rank;
+                claimCoinsOnce("tournament-" + quizAttemptId, finalPrize, "Tournament Prize", null,
+                    (committed, alreadyClaimed, error) -> showResultDialog(
+                        committed ? finalRank + " Winner!" : "Reward unavailable",
+                        committed ? "You scored " + correctAnswersCount + "/" + totalQ + "!\n\nYou won " + finalPrize + " Coins from the pool!" : "The tournament reward could not be claimed. Try again later.",
+                        committed ? "🏆" : "⚠️"));
             } else {
                 showResultDialog("Match Finished", "You scored " + correctAnswersCount + "/" + totalQ + ".\n\nBetter luck next time!", "💔");
             }
         } else {
             if (coinsEarnedInQuiz > 0) {
-                addCoins(coinsEarnedInQuiz, "Quick Quiz Reward");
-                showResultDialog("Good Game!", "You scored " + correctAnswersCount + "/" + totalQ + ".\nEarned " + coinsEarnedInQuiz + " Points!", "🎉");
+                claimCoinsOnce("quiz-" + quizAttemptId, coinsEarnedInQuiz, "Quick Quiz Reward", null,
+                    (committed, alreadyClaimed, error) -> showResultDialog(
+                        committed ? "Good Game!" : "Reward unavailable",
+                        committed ? "You scored " + correctAnswersCount + "/" + totalQ + ".\nEarned " + coinsEarnedInQuiz + " Points!" : "The quiz reward could not be claimed. Try again later.",
+                        committed ? "🎉" : "⚠️"));
             } else {
                 showResultDialog("Game Over", "You scored " + correctAnswersCount + "/" + totalQ + ".\nPractice more!", "📚");
             }
@@ -879,17 +936,22 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void recordQuizResult(int totalQuestions) {
-        if (auth.getCurrentUser() == null || totalQuestions <= 0) return;
+        if (auth.getCurrentUser() == null || totalQuestions <= 0 || quizAttemptId == null) return;
         Map<String, Object> result = new HashMap<>();
+        int wrongAnswers = totalQuestions - correctAnswersCount;
+        double percentage = (correctAnswersCount * 100.0) / totalQuestions;
+        result.put("attemptId", quizAttemptId);
         result.put("userId", auth.getUid());
         result.put("userName", userNameStr);
         result.put("email", auth.getCurrentUser().getEmail());
         result.put("category", activeQuickCategory != null ? activeQuickCategory.title : (activeTournament != null ? activeTournament.title : "Quiz"));
         result.put("score", coinsEarnedInQuiz);
         result.put("correctAnswers", correctAnswersCount);
+        result.put("wrongAnswers", wrongAnswers);
         result.put("totalQuestions", totalQuestions);
+        result.put("percentage", percentage);
         result.put("timestamp", ServerValue.TIMESTAMP);
-        db.child("quiz_results").push().setValue(result);
+        db.child("quiz_results").child(historyKey(quizAttemptId)).setValue(result);
     }
 
     class QuickCategoryAdapter extends RecyclerView.Adapter<QuickCategoryAdapter.VH> {

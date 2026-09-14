@@ -31,7 +31,7 @@
     </LinearLayout>
 
     <!-- ============ MAIN APP ============ -->
-    <RelativeLayout android:id="@+id/mainAppView" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
+    <RelativeLayout android:id="@+id/mainAppView" android:layout_width="match_parent" android:layout_height="match_parent" android:fitsSystemWindows="true" android:visibility="gone">
         
         <!-- BANNER AD VIEW -->
         <com.google.android.gms.ads.AdView
@@ -47,7 +47,7 @@
 
             <!-- HOME -->
             <androidx.core.widget.NestedScrollView android:id="@+id/pageHome" android:layout_width="match_parent" android:layout_height="match_parent" android:clipToPadding="false" android:paddingBottom="20dp" android:visibility="visible">
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp" android:paddingBottom="96dp">
 
                     <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/bg_card" android:padding="14dp" android:layout_marginTop="8dp" android:layout_marginBottom="14dp">
                         <ImageView android:id="@+id/imgUserAvatar" android:layout_width="52dp" android:layout_height="52dp" android:src="@drawable/ic_user" android:background="@drawable/bg_avatar_ring" android:padding="10dp" android:layout_centerVertical="true"/>
@@ -82,7 +82,8 @@
             </androidx.core.widget.NestedScrollView>
 
             <!-- TOURNAMENTS -->
-            <LinearLayout android:id="@+id/pageCategories" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="16dp" android:visibility="gone">
+            <androidx.core.widget.NestedScrollView android:id="@+id/pageCategories" android:layout_width="match_parent" android:layout_height="match_parent" android:fillViewport="true" android:clipToPadding="false" android:paddingBottom="84dp" android:visibility="gone">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="TOURNAMENT" android:textColor="@color/text_primary" android:textSize="20sp" android:textStyle="bold" android:layout_marginTop="8dp" android:layout_marginBottom="14dp"/>
                 <ProgressBar android:id="@+id/tournamentsLoading" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center_horizontal" android:visibility="gone"/>
                 <LinearLayout android:layout_width="match_parent" android:layout_height="44dp" android:background="@drawable/bg_tab_container" android:orientation="horizontal" android:gravity="center" android:padding="4dp" android:layout_marginBottom="16dp">
@@ -90,11 +91,13 @@
                     <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="UPCOMING" android:gravity="center" android:textSize="12sp" android:textStyle="bold" android:textColor="@color/text_secondary"/>
                     <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="COMPLETED" android:gravity="center" android:textSize="12sp" android:textStyle="bold" android:textColor="@color/text_secondary"/>
                 </LinearLayout>
-                <androidx.recyclerview.widget.RecyclerView android:id="@+id/recyclerTournamentsFull" android:layout_width="match_parent" android:layout_height="match_parent"/>
-            </LinearLayout>
+                <androidx.recyclerview.widget.RecyclerView android:id="@+id/recyclerTournamentsFull" android:layout_width="match_parent" android:layout_height="wrap_content" android:nestedScrollingEnabled="false"/>
+                </LinearLayout>
+            </androidx.core.widget.NestedScrollView>
 
             <!-- LEADERBOARD -->
-            <LinearLayout android:id="@+id/pageRank" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="16dp" android:visibility="gone">
+            <androidx.core.widget.NestedScrollView android:id="@+id/pageRank" android:layout_width="match_parent" android:layout_height="match_parent" android:fillViewport="true" android:clipToPadding="false" android:paddingBottom="84dp" android:visibility="gone">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="LEADERBOARD" android:textColor="@color/text_primary" android:textSize="20sp" android:textStyle="bold" android:layout_marginTop="8dp" android:layout_marginBottom="14dp"/>
                 <ProgressBar android:id="@+id/leaderboardLoading" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center_horizontal" android:visibility="gone"/>
                 <LinearLayout android:layout_width="match_parent" android:layout_height="44dp" android:background="@drawable/bg_tab_container" android:orientation="horizontal" android:gravity="center" android:padding="4dp" android:layout_marginBottom="16dp">
@@ -102,13 +105,18 @@
                     <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="COUNTRY" android:gravity="center" android:textSize="12sp" android:textStyle="bold" android:textColor="@color/text_secondary"/>
                     <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="FRIENDS" android:gravity="center" android:textSize="12sp" android:textStyle="bold" android:textColor="@color/text_secondary"/>
                 </LinearLayout>
-                <androidx.recyclerview.widget.RecyclerView android:id="@+id/recyclerLeaderboardFull" android:layout_width="match_parent" android:layout_height="match_parent"/>
-            </LinearLayout>
+                <androidx.recyclerview.widget.RecyclerView android:id="@+id/recyclerLeaderboardFull" android:layout_width="match_parent" android:layout_height="wrap_content" android:nestedScrollingEnabled="false"/>
+                </LinearLayout>
+            </androidx.core.widget.NestedScrollView>
 
             <!-- PROFILE -->
-            <LinearLayout android:id="@+id/pageProfile" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="16dp" android:visibility="gone">
+            <androidx.core.widget.NestedScrollView android:id="@+id/pageProfile" android:layout_width="match_parent" android:layout_height="match_parent" android:fillViewport="true" android:clipToPadding="false" android:paddingBottom="84dp" android:visibility="gone">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:gravity="center_horizontal" android:background="@drawable/bg_card" android:padding="20dp" android:layout_marginTop="8dp">
                     <ImageView android:id="@+id/imgProfileAvatar" android:layout_width="90dp" android:layout_height="90dp" android:src="@drawable/ic_user" android:background="@drawable/bg_avatar_ring" android:padding="22dp"/>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="PROFILE PICTURE" android:textColor="@color/text_secondary" android:textSize="12sp" android:textStyle="bold" android:layout_marginTop="8dp"/>
+                    <androidx.appcompat.widget.AppCompatButton android:id="@+id/btnProfilePicture" android:layout_width="wrap_content" android:layout_height="40dp" android:text="CHOOSE PICTURE" android:background="@drawable/bg_btn_gold" android:textColor="@color/gold_text_dark" android:textSize="12sp" android:textStyle="bold" android:layout_marginTop="6dp"/>
+                    <androidx.appcompat.widget.AppCompatButton android:id="@+id/btnRemoveProfilePicture" android:layout_width="wrap_content" android:layout_height="36dp" android:text="REMOVE PICTURE" android:background="@drawable/bg_btn_outline_red" android:textColor="@color/error" android:textSize="11sp" android:layout_marginTop="6dp"/>
                     <TextView android:id="@+id/profName" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Player" android:textColor="@color/text_primary" android:textSize="22sp" android:textStyle="bold" android:layout_marginTop="10dp"/>
                     <TextView android:id="@+id/profEmail" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="player@email.com" android:textColor="@color/text_secondary" android:textSize="14sp"/>
                     
@@ -142,10 +150,11 @@
                 </LinearLayout>
 
                 <androidx.appcompat.widget.AppCompatButton android:id="@+id/btnDailyClaim" android:layout_width="match_parent" android:layout_height="52dp" android:text="CLAIM DAILY BONUS (+20)" android:background="@drawable/bg_btn_gold" android:textColor="@color/gold_text_dark" android:textStyle="bold" android:layout_marginTop="14dp"/>
-            </LinearLayout>
+                </LinearLayout>
+            </androidx.core.widget.NestedScrollView>
         </FrameLayout>
 
-        <com.google.android.material.bottomnavigation.BottomNavigationView android:id="@+id/bottomNav" android:layout_width="match_parent" android:layout_height="68dp" android:layout_alignParentBottom="true" android:background="@color/surface" app:itemTextColor="@color/bottom_nav_color" app:itemIconTint="@color/bottom_nav_color" app:menu="@menu/bottom_nav_menu" app:labelVisibilityMode="labeled" android:elevation="16dp"/>
+        <com.google.android.material.bottomnavigation.BottomNavigationView android:id="@+id/bottomNav" android:layout_width="match_parent" android:layout_height="68dp" android:layout_alignParentBottom="true" android:fitsSystemWindows="true" android:background="@color/surface" app:itemTextColor="@color/bottom_nav_color" app:itemIconTint="@color/bottom_nav_color" app:menu="@menu/bottom_nav_menu" app:labelVisibilityMode="labeled" android:elevation="16dp"/>
     </RelativeLayout>
 
     <!-- ============ QUIZ (Royal Dark KBC) ============ -->
@@ -167,7 +176,9 @@
             <TextView android:id="@+id/tvQuestion" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Question..." android:textColor="@color/text_primary" android:textSize="21sp" android:textStyle="bold" android:gravity="center" android:lineSpacingExtra="4dp"/>
         </LinearLayout>
 
-        <TextView android:id="@+id/quizPointsCurrent" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Winning: 0 Coins" android:textColor="@color/gold" android:textSize="14sp" android:textStyle="bold" android:layout_above="@id/llOptions" android:layout_centerHorizontal="true" android:layout_marginBottom="14dp"/>
+        <com.google.android.gms.ads.AdView android:id="@+id/quizAdView" android:layout_width="match_parent" android:layout_height="50dp" android:layout_below="@id/questionCard" android:layout_centerHorizontal="true" android:layout_marginTop="4dp" android:layout_marginBottom="8dp" app:adSize="BANNER" app:adUnitId="ca-app-pub-3940256099942544/6300978111"/>
+
+        <TextView android:id="@+id/quizPointsCurrent" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Winning: 0 Coins" android:textColor="@color/gold" android:textSize="14sp" android:textStyle="bold" android:layout_below="@id/quizAdView" android:layout_above="@id/llOptions" android:layout_centerHorizontal="true" android:layout_marginTop="2dp" android:layout_marginBottom="14dp"/>
 
         <LinearLayout android:id="@+id/llOptions" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_alignParentBottom="true" android:layout_marginBottom="16dp">
             <androidx.appcompat.widget.AppCompatButton android:id="@+id/btnOpt1" android:layout_width="match_parent" android:layout_height="60dp" android:text="A. Opt" android:textColor="@color/text_primary" android:background="@drawable/bg_option_btn" android:layout_marginBottom="12dp" android:textAllCaps="false" android:gravity="start|center_vertical" android:paddingStart="22dp" android:textStyle="bold" android:textSize="15sp"/>

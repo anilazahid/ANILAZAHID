@@ -19,7 +19,8 @@
     "quiz_results": {
       "$resultId": {
         ".read": "auth != null && root.child('admin_users').child(auth.uid).val() == true",
-        ".write": "auth != null && ((!data.exists() && newData.child('userId').val() == auth.uid) || root.child('admin_users').child(auth.uid).val() == true)"
+        ".write": "auth != null && ((!data.exists() && newData.child('userId').val() == auth.uid) || root.child('admin_users').child(auth.uid).val() == true)",
+        ".validate": "newData.hasChildren(['attemptId', 'userId', 'category', 'totalQuestions', 'correctAnswers', 'wrongAnswers', 'score', 'percentage', 'timestamp']) && newData.child('userId').val() == auth.uid && newData.child('totalQuestions').isNumber() && newData.child('correctAnswers').isNumber() && newData.child('wrongAnswers').isNumber() && newData.child('percentage').isNumber()"
       }
     },
     "admin_settings": {
