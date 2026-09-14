@@ -1,8 +1,8 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:id="@android:id/background">
-        <shape><solid android:color="#134E4A"/><corners android:radius="6dp"/></shape>
+        <shape><solid android:color="@color/soft_blue"/><corners android:radius="6dp"/></shape>
     </item>
     <item android:id="@android:id/progress">
-        <clip><shape><solid android:color="#FFC93C"/><corners android:radius="6dp"/></shape></clip>
+        <clip><shape><solid android:color="@color/gold"/><corners android:radius="6dp"/></shape></clip>
     </item>
 </layer-list>

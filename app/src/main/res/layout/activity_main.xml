@@ -23,7 +23,7 @@
 
             <LinearLayout android:id="@+id/btnGoogleSignIn" android:layout_width="match_parent" android:layout_height="54dp" android:background="@drawable/bg_btn_google" android:gravity="center" android:clickable="true" android:focusable="true">
                 <ImageView android:layout_width="22dp" android:layout_height="22dp" android:src="@drawable/ic_google"/>
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Continue with Google" android:textColor="#1D133B" android:textStyle="bold" android:textSize="15sp" android:layout_marginStart="10dp"/>
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Continue with Google" android:textColor="@color/text_primary" android:textStyle="bold" android:textSize="15sp" android:layout_marginStart="10dp"/>
             </LinearLayout>
 
             <TextView android:id="@+id/btnToggleAuth" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="New User? Register here" android:textColor="@color/gold" android:textSize="14sp" android:gravity="center" android:layout_marginTop="26dp" android:textStyle="bold"/>
@@ -142,8 +142,8 @@
                 </LinearLayout>
 
                 <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/bg_rank_banner" android:padding="16dp" android:layout_marginTop="14dp">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Your Rank" android:textColor="#3A2400" android:textSize="13sp" android:textStyle="bold"/>
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="#2,345" android:textColor="#2A1B00" android:textSize="26sp" android:textStyle="bold" android:layout_marginTop="18dp"/>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Your Rank" android:textColor="@color/gold_text_dark" android:textSize="13sp" android:textStyle="bold"/>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="#2,345" android:textColor="@color/gold_text_dark" android:textSize="26sp" android:textStyle="bold" android:layout_marginTop="18dp"/>
                     <ImageView android:layout_width="52dp" android:layout_height="52dp" android:src="@drawable/ic_shield" android:layout_alignParentEnd="true" android:layout_centerVertical="true"/>
                 </RelativeLayout>
 
