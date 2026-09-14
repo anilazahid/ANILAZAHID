@@ -54,6 +54,7 @@ public class MainActivity extends AppCompatActivity {
     private ImageView imgUserAvatar, imgProfileAvatar, homeTrophy3D;
     private BottomNavigationView bottomNav;
     private RecyclerView recyclerCategories, recyclerTournamentsFull, recyclerLeaderboardFull;
+    private ProgressBar categoriesProgress, tournamentsProgress, leaderboardProgress;
 
     private View quizContainer, quizTopicBanner;
     private TextView quizHeader, quizPointsCurrent, tvQuestion, tvTimer, quizTopicIcon, quizTopicName;
@@ -76,10 +77,16 @@ public class MainActivity extends AppCompatActivity {
     private List<QuizQuestion> currentQuizQuestions = new ArrayList<>();
     private boolean dailyRewardClaimed;
     private boolean dailyRewardInProgress;
+    private String dailyRewardFeedback;
     private boolean adRewardInProgress;
     private boolean userDataLoaded;
     private boolean tournamentsLoaded;
     private boolean leaderboardLoaded;
+    private boolean quickCategoriesLoaded;
+    private boolean userDataLoading;
+    private boolean tournamentsLoading;
+    private boolean leaderboardLoading;
+    private boolean quickCategoriesLoading;
 
     private static final int WATCH_AD_REWARD_COINS = 50;
 
@@ -104,7 +111,6 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         initFirebase(); initGoogleAuth(); initViews(); setupListeners(); initAds();
-        loadQuickCategoriesFromFirebase();
         if (auth.getCurrentUser() != null) showMainApp();
     }
 
@@ -171,6 +177,9 @@ public class MainActivity extends AppCompatActivity {
         recyclerCategories = findViewById(R.id.recyclerCategories); recyclerCategories.setLayoutManager(new GridLayoutManager(this, 3));
         recyclerTournamentsFull = findViewById(R.id.recyclerTournamentsFull); recyclerTournamentsFull.setLayoutManager(new LinearLayoutManager(this));
         recyclerLeaderboardFull = findViewById(R.id.recyclerLeaderboardFull); recyclerLeaderboardFull.setLayoutManager(new LinearLayoutManager(this));
+        categoriesProgress = findViewById(R.id.categoriesLoading);
+        tournamentsProgress = findViewById(R.id.tournamentsLoading);
+        leaderboardProgress = findViewById(R.id.leaderboardLoading);
 
         quizContainer = findViewById(R.id.kbcQuizContainer); quizHeader = findViewById(R.id.quizHeader);
         tvTimer = findViewById(R.id.tvTimer); quizPointsCurrent = findViewById(R.id.quizPointsCurrent); tvQuestion = findViewById(R.id.tvQuestion);
@@ -306,6 +315,7 @@ public class MainActivity extends AppCompatActivity {
         userDataLoaded = false;
         tournamentsLoaded = false;
         leaderboardLoaded = false;
+        quickCategoriesLoaded = false;
         mGoogleSignInClient.signOut().addOnCompleteListener(this, task -> returnToLogin());
     }
 
@@ -318,15 +328,18 @@ public class MainActivity extends AppCompatActivity {
     private void showMainApp() {
         authView.setVisibility(View.GONE); mainAppView.setVisibility(View.VISIBLE);
         bottomNav.setSelectedItemId(R.id.nav_home);
-        if (!userDataLoaded) loadUserData();
-        if (!tournamentsLoaded) loadTournaments();
-        if (!leaderboardLoaded) loadLeaderboard();
+        if (!userDataLoaded && !userDataLoading) loadUserData();
+        if (!tournamentsLoaded && !tournamentsLoading) loadTournaments();
+        if (!leaderboardLoaded && !leaderboardLoading) loadLeaderboard();
+        if (!quickCategoriesLoaded && !quickCategoriesLoading) loadQuickCategoriesFromFirebase();
     }
 
     private void loadUserData() {
         if (auth.getUid() == null) return;
+        userDataLoading = true;
         db.child("users").child(auth.getUid()).addListenerForSingleValueEvent(new ValueEventListener() {
             @Override public void onDataChange(@NonNull DataSnapshot s) {
+                userDataLoading = false;
                 if (!s.exists()) return;
             userDataLoaded = true;
                 userNameStr = s.child("username").getValue(String.class);
@@ -346,7 +359,7 @@ public class MainActivity extends AppCompatActivity {
                     Glide.with(MainActivity.this).load(picUrl).circleCrop().into(imgProfileAvatar);
                 }
             }
-            @Override public void onCancelled(@NonNull DatabaseError e) {}
+            @Override public void onCancelled(@NonNull DatabaseError e) { userDataLoading = false; }
         });
     }
 
@@ -382,7 +395,8 @@ public class MainActivity extends AppCompatActivity {
     private void updateDailyRewardState(String claimedDate) {
         dailyRewardClaimed = todayKey().equals(claimedDate);
         String label = dailyRewardInProgress ? "CLAIMING..." : (dailyRewardClaimed ? "CLAIMED TODAY" : "CLAIM DAILY REWARD (+20)");
-        if (dailyRewardStatus != null) dailyRewardStatus.setText(dailyRewardInProgress ? "Claiming your daily reward..." : (dailyRewardClaimed ? "Daily reward claimed. Come back tomorrow." : "Claim 20 coins once every day."));
+        String status = dailyRewardInProgress ? "Claiming..." : (dailyRewardFeedback != null ? dailyRewardFeedback : (dailyRewardClaimed ? "Daily reward already claimed today." : "Claim 20 coins once every day."));
+        if (dailyRewardStatus != null) dailyRewardStatus.setText(status);
         if (dailyRewardClaim != null) {
             dailyRewardClaim.setText(label);
             dailyRewardClaim.setEnabled(!dailyRewardClaimed && !dailyRewardInProgress);
@@ -400,21 +414,26 @@ public class MainActivity extends AppCompatActivity {
         }
         String today = todayKey();
         dailyRewardInProgress = true;
-        updateDailyRewardState(today);
+        dailyRewardFeedback = null;
+        updateDailyRewardState(dailyRewardClaimed ? today : null);
         claimCoinsOnce("daily-" + today, QuizBank.DAILY_REWARD_COINS, "Daily Bonus", today,
             (committed, alreadyClaimed, error) -> {
                 dailyRewardInProgress = false;
                 if (committed) {
                     dailyRewardClaimed = true;
+                    dailyRewardFeedback = "Reward claimed: +20 coins";
                     updateDailyRewardState(today);
                     Toast.makeText(this, "+" + QuizBank.DAILY_REWARD_COINS + " Daily Coins Added!", Toast.LENGTH_SHORT).show();
                 } else if (alreadyClaimed) {
                     dailyRewardClaimed = true;
+                    dailyRewardFeedback = "Daily reward already claimed today.";
                     updateDailyRewardState(today);
                     Toast.makeText(this, "Daily reward already claimed today.", Toast.LENGTH_SHORT).show();
                 } else {
-                    updateDailyRewardState(today);
-                    Toast.makeText(this, "Could not claim daily reward. Try again.", Toast.LENGTH_SHORT).show();
+                    dailyRewardClaimed = false;
+                    dailyRewardFeedback = "Reward failed - try again";
+                    updateDailyRewardState(null);
+                    Toast.makeText(this, "Reward failed - try again", Toast.LENGTH_SHORT).show();
                 }
             });
     }
@@ -499,8 +518,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadTournaments() {
+        tournamentsLoading = true;
+        if (tournamentsProgress != null) tournamentsProgress.setVisibility(View.VISIBLE);
         db.child("tournaments").addListenerForSingleValueEvent(new ValueEventListener() {
             @Override public void onDataChange(@NonNull DataSnapshot s) {
+                tournamentsLoading = false;
+                if (tournamentsProgress != null) tournamentsProgress.setVisibility(View.GONE);
             tournamentsLoaded = true;
                 tournamentList.clear();
                 if (s.exists()) {
@@ -516,13 +539,22 @@ public class MainActivity extends AppCompatActivity {
                 }
                 recyclerTournamentsFull.setAdapter(new TournamentFullAdapter(tournamentList));
             }
-            @Override public void onCancelled(@NonNull DatabaseError e) {}
+            @Override public void onCancelled(@NonNull DatabaseError e) {
+                tournamentsLoading = false;
+                if (tournamentsProgress != null) tournamentsProgress.setVisibility(View.GONE);
+            }
         });
     }
 
     private void loadQuickCategoriesFromFirebase() {
-        db.child("quick_categories").addValueEventListener(new ValueEventListener() {
+        if (auth.getUid() == null) return;
+        quickCategoriesLoading = true;
+        if (categoriesProgress != null) categoriesProgress.setVisibility(View.VISIBLE);
+        db.child("quick_categories").addListenerForSingleValueEvent(new ValueEventListener() {
             @Override public void onDataChange(@NonNull DataSnapshot snap) {
+                quickCategoriesLoading = false;
+                if (categoriesProgress != null) categoriesProgress.setVisibility(View.GONE);
+                quickCategoriesLoaded = true;
                 quickCategoryList.clear();
                 List<QuizBank.StarterCategory> starterCategories = QuizBank.categories();
                 Set<String> existingTitles = new HashSet<>();
@@ -564,7 +596,10 @@ public class MainActivity extends AppCompatActivity {
                 if (!missing.isEmpty()) seedStarterCategories(missing);
                 recyclerCategories.setAdapter(new QuickCategoryAdapter(quickCategoryList));
             }
-            @Override public void onCancelled(@NonNull DatabaseError error) {}
+            @Override public void onCancelled(@NonNull DatabaseError error) {
+                quickCategoriesLoading = false;
+                if (categoriesProgress != null) categoriesProgress.setVisibility(View.GONE);
+            }
         });
     }
 
@@ -612,14 +647,21 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadLeaderboard() {
+        leaderboardLoading = true;
+        if (leaderboardProgress != null) leaderboardProgress.setVisibility(View.VISIBLE);
         db.child("users").orderByChild("points").limitToLast(50).addListenerForSingleValueEvent(new ValueEventListener() {
             @Override public void onDataChange(@NonNull DataSnapshot s) {
+                leaderboardLoading = false;
+                if (leaderboardProgress != null) leaderboardProgress.setVisibility(View.GONE);
             leaderboardLoaded = true;
                 leaderboardList.clear();
                 for (DataSnapshot ds : s.getChildren()) { User u = ds.getValue(User.class); if (u != null) leaderboardList.add(0, u); }
                 recyclerLeaderboardFull.setAdapter(new LeaderboardAdapter(leaderboardList));
             }
-            @Override public void onCancelled(@NonNull DatabaseError e) {}
+            @Override public void onCancelled(@NonNull DatabaseError e) {
+                leaderboardLoading = false;
+                if (leaderboardProgress != null) leaderboardProgress.setVisibility(View.GONE);
+            }
         });
     }
 

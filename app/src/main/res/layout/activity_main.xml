@@ -76,6 +76,7 @@
                     </LinearLayout>
 
                     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Top Categories" android:textColor="@color/text_primary" android:textSize="17sp" android:textStyle="bold" android:layout_marginBottom="12dp"/>
+                    <ProgressBar android:id="@+id/categoriesLoading" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center_horizontal" android:visibility="gone"/>
                     <androidx.recyclerview.widget.RecyclerView android:id="@+id/recyclerCategories" android:layout_width="match_parent" android:layout_height="wrap_content" android:nestedScrollingEnabled="false"/>
                 </LinearLayout>
             </androidx.core.widget.NestedScrollView>
@@ -83,6 +84,7 @@
             <!-- TOURNAMENTS -->
             <LinearLayout android:id="@+id/pageCategories" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="16dp" android:visibility="gone">
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="TOURNAMENT" android:textColor="@color/text_primary" android:textSize="20sp" android:textStyle="bold" android:layout_marginTop="8dp" android:layout_marginBottom="14dp"/>
+                <ProgressBar android:id="@+id/tournamentsLoading" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center_horizontal" android:visibility="gone"/>
                 <LinearLayout android:layout_width="match_parent" android:layout_height="44dp" android:background="@drawable/bg_tab_container" android:orientation="horizontal" android:gravity="center" android:padding="4dp" android:layout_marginBottom="16dp">
                     <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="ONGOING" android:gravity="center" android:textSize="12sp" android:textStyle="bold" android:textColor="@color/gold_text_dark" android:background="@drawable/bg_tab_active"/>
                     <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="UPCOMING" android:gravity="center" android:textSize="12sp" android:textStyle="bold" android:textColor="@color/text_secondary"/>
@@ -94,6 +96,7 @@
             <!-- LEADERBOARD -->
             <LinearLayout android:id="@+id/pageRank" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="16dp" android:visibility="gone">
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="LEADERBOARD" android:textColor="@color/text_primary" android:textSize="20sp" android:textStyle="bold" android:layout_marginTop="8dp" android:layout_marginBottom="14dp"/>
+                <ProgressBar android:id="@+id/leaderboardLoading" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center_horizontal" android:visibility="gone"/>
                 <LinearLayout android:layout_width="match_parent" android:layout_height="44dp" android:background="@drawable/bg_tab_container" android:orientation="horizontal" android:gravity="center" android:padding="4dp" android:layout_marginBottom="16dp">
                     <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="GLOBAL" android:gravity="center" android:textSize="12sp" android:textStyle="bold" android:textColor="@color/gold_text_dark" android:background="@drawable/bg_tab_active"/>
                     <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="COUNTRY" android:gravity="center" android:textSize="12sp" android:textStyle="bold" android:textColor="@color/text_secondary"/>
