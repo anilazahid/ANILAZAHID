@@ -78,7 +78,7 @@ public class AdminCategoriesActivity extends AdminBaseActivity {
     private class CategoryAdapter extends RecyclerView.Adapter<CategoryAdapter.Holder> {
         @Override public Holder onCreateViewHolder(android.view.ViewGroup parent, int type) {
             TextView row = new TextView(AdminCategoriesActivity.this);
-            row.setTextColor(0xffffffff);
+            row.setTextColor(getColor(R.color.text_primary));
             row.setTextSize(16);
             row.setPadding(18, 18, 18, 18);
             row.setBackgroundResource(R.drawable.bg_card);

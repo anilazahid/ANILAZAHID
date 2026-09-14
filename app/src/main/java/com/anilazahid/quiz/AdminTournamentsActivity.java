@@ -271,7 +271,7 @@ public class AdminTournamentsActivity extends AdminBaseActivity {
     private class TournamentAdapter extends RecyclerView.Adapter<TournamentAdapter.Holder> {
         @Override public Holder onCreateViewHolder(ViewGroup parent, int type) {
             TextView row = new TextView(AdminTournamentsActivity.this);
-            row.setTextColor(0xffffffff); row.setTextSize(15); row.setPadding(18, 18, 18, 18); row.setBackgroundResource(R.drawable.bg_card);
+            row.setTextColor(getColor(R.color.text_primary)); row.setTextSize(15); row.setPadding(18, 18, 18, 18); row.setBackgroundResource(R.drawable.bg_card);
             return new Holder(row);
         }
         @Override public void onBindViewHolder(Holder holder, int position) {

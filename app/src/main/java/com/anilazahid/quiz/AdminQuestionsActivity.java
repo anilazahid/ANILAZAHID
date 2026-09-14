@@ -182,7 +182,7 @@ public class AdminQuestionsActivity extends AdminBaseActivity {
     private class QuestionAdapter extends RecyclerView.Adapter<QuestionAdapter.Holder> {
         @Override public Holder onCreateViewHolder(ViewGroup parent, int type) {
             TextView row = new TextView(AdminQuestionsActivity.this);
-            row.setTextColor(0xffffffff); row.setTextSize(15); row.setPadding(18, 18, 18, 18); row.setBackgroundResource(R.drawable.bg_card);
+            row.setTextColor(getColor(R.color.text_primary)); row.setTextSize(15); row.setPadding(18, 18, 18, 18); row.setBackgroundResource(R.drawable.bg_card);
             return new Holder(row);
         }
         @Override public void onBindViewHolder(Holder holder, int position) {
