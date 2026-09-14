@@ -19,10 +19,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 
 public class AdminTournamentsActivity extends AdminBaseActivity {
     private final List<DataSnapshot> tournaments = new ArrayList<>();
     private TournamentAdapter adapter;
+    private android.widget.Button seedButton;
+    private boolean seeding;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -30,10 +34,10 @@ public class AdminTournamentsActivity extends AdminBaseActivity {
         ((TextView) findViewById(R.id.adminListTitle)).setText("TOURNAMENT MANAGEMENT");
         ((android.widget.Button) findViewById(R.id.adminListAdd)).setText("CREATE");
         findViewById(R.id.adminListAdd).setOnClickListener(v -> editTournament(null));
-        android.widget.Button seed = new android.widget.Button(this);
-        seed.setText("SEED 120");
-        seed.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle("SEED TOURNAMENTS?").setMessage("Create 100 ongoing and 20 upcoming free tournaments across the 15 categories.").setNegativeButton("CANCEL", null).setPositiveButton("CREATE", (d, w) -> seedInitialTournaments()).show());
-        ((ViewGroup) findViewById(R.id.adminListTitle).getParent()).addView(seed, 1, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        seedButton = new android.widget.Button(this);
+        seedButton.setText("SEED 120 TOURNAMENTS");
+        seedButton.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle("SEED TOURNAMENTS?").setMessage("Create or repair 100 ongoing and 20 upcoming free tournaments across the 15 official categories.").setNegativeButton("CANCEL", null).setPositiveButton("SEED", (d, w) -> seedInitialTournaments()).show());
+        ((ViewGroup) findViewById(R.id.adminListTitle).getParent()).addView(seedButton, 1, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         findViewById(R.id.adminListSearch).setVisibility(View.GONE);
         findViewById(R.id.adminListBack).setOnClickListener(v -> finish());
         RecyclerView list = findViewById(R.id.adminRecycler);
@@ -114,31 +118,71 @@ public class AdminTournamentsActivity extends AdminBaseActivity {
     }
 
     private void seedInitialTournaments() {
-        if (!tournaments.isEmpty()) { toast("Tournaments already exist; seed skipped."); return; }
+        if (seeding) return;
+        seeding = true;
+        seedButton.setEnabled(false);
+        seedButton.setText("SEEDING...");
         List<QuizBank.StarterCategory> categories = QuizBank.categories();
-        Map<String, Object> updates = new HashMap<>();
-        long now = System.currentTimeMillis();
-        for (int index = 1; index <= 100; index++) {
-            QuizBank.StarterCategory category = categories.get((index - 1) % categories.size());
-            String id = String.format(Locale.US, "championship-%03d", index);
-            Map<String, Object> tournament = tournament("Quiz Championship #" + String.format(Locale.US, "%03d", index), category.title, 10, now - 86400000L, now + 30L * 86400000L, true);
-            updates.put(id, tournament);
-        }
-        for (int index = 1; index <= 20; index++) {
-            QuizBank.StarterCategory category = categories.get((index - 1) % categories.size());
-            String id = String.format(Locale.US, "challenge-upcoming-%03d", index);
-            Map<String, Object> tournament = tournament("Quiz Challenge #" + String.format(Locale.US, "%03d", index), category.title, 10, now + index * 86400000L, now + (index + 2L) * 86400000L, true);
-            updates.put(id, tournament);
-        }
-        db.child("tournaments").updateChildren(updates).addOnSuccessListener(done -> toast("100 ongoing and 20 upcoming tournaments created."))
-                .addOnFailureListener(error -> toast("Could not seed tournaments."));
+        db.child("tournaments").addListenerForSingleValueEvent(new ValueEventListener() {
+            @Override public void onDataChange(DataSnapshot snapshot) {
+                Map<String, Object> updates = new HashMap<>();
+                long now = System.currentTimeMillis();
+                for (int index = 1; index <= 100; index++) {
+                    QuizBank.StarterCategory category = categories.get((index - 1) % categories.size());
+                    String id = String.format(Locale.US, "championship-%03d", index);
+                    updates.put(id, tournament(id, "Quiz Championship #" + String.format(Locale.US, "%03d", index), category.title, 10, now - 86400000L, now + 30L * 86400000L, true));
+                }
+                for (int index = 1; index <= 20; index++) {
+                    QuizBank.StarterCategory category = categories.get((index - 1) % categories.size());
+                    String id = String.format(Locale.US, "challenge-upcoming-%03d", index);
+                    updates.put(id, tournament(id, "Quiz Challenge #" + String.format(Locale.US, "%03d", index), category.title, 10, now + index * 86400000L, now + (index + 2L) * 86400000L, true));
+                }
+                db.child("tournaments").updateChildren(updates).addOnSuccessListener(done -> {
+                    verifySeedResult();
+                }).addOnFailureListener(error -> finishSeedWithError(error.getMessage()));
+            }
+            @Override public void onCancelled(DatabaseError error) { finishSeedWithError(error.getMessage()); }
+        });
     }
 
-    private Map<String, Object> tournament(String title, String category, int questions, long start, long end, boolean published) {
+    private void finishSeedWithError(String message) {
+        seeding = false;
+        seedButton.setEnabled(true);
+        seedButton.setText("SEED 120 TOURNAMENTS");
+        toast("Seeding failed: " + (message == null ? "Firebase permission denied." : message));
+    }
+
+    private void verifySeedResult() {
+        db.child("tournaments").addListenerForSingleValueEvent(new ValueEventListener() {
+            @Override public void onDataChange(DataSnapshot snapshot) {
+                long now = System.currentTimeMillis();
+                int ongoing = 0;
+                int upcoming = 0;
+                Set<String> ids = new HashSet<>();
+                for (DataSnapshot item : snapshot.getChildren()) {
+                    String id = item.getKey();
+                    if (id == null || !ids.add(id)) continue;
+                    Boolean published = item.child("published").getValue(Boolean.class);
+                    Long start = item.child("startTime").getValue(Long.class);
+                    Long end = item.child("endTime").getValue(Long.class);
+                    if (!Boolean.TRUE.equals(published) || start == null || end == null) continue;
+                    if (start <= now && end > now) ongoing++;
+                    else if (start > now) upcoming++;
+                }
+                seeding = false;
+                seedButton.setEnabled(true);
+                seedButton.setText("SEED 120 TOURNAMENTS");
+                toast(ongoing + " ongoing + " + upcoming + " upcoming tournaments ready.");
+            }
+            @Override public void onCancelled(DatabaseError error) { finishSeedWithError(error.getMessage()); }
+        });
+    }
+
+    private Map<String, Object> tournament(String id, String title, String category, int questions, long start, long end, boolean published) {
         Map<String, Object> data = new HashMap<>();
-        data.put("title", title); data.put("description", "Free quiz competition for points and rankings.");
+        data.put("tournamentId", id); data.put("title", title); data.put("description", "Free quiz competition for points and rankings.");
         data.put("category", category); data.put("totalQuestions", questions); data.put("startTime", start); data.put("endTime", end);
-        data.put("status", status(start, end)); data.put("published", published); data.put("createdBy", auth.getUid()); data.put("createdAt", ServerValue.TIMESTAMP);
+        data.put("status", status(start, end)); data.put("published", published); data.put("entry_points", 0); data.put("createdBy", auth.getUid()); data.put("createdAt", ServerValue.TIMESTAMP);
         return data;
     }
 

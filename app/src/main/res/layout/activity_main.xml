@@ -39,6 +39,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_above="@id/bottomNav"
+            android:layout_alignParentBottom="true"
             android:layout_centerHorizontal="true"
             app:adSize="BANNER"
             app:adUnitId="ca-app-pub-3940256099942544/6300978111" />
@@ -92,8 +93,12 @@
                     <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="COMPLETED" android:gravity="center" android:textSize="12sp" android:textStyle="bold" android:textColor="@color/text_secondary"/>
                 </LinearLayout>
                 <androidx.recyclerview.widget.RecyclerView android:id="@+id/recyclerTournamentsFull" android:layout_width="match_parent" android:layout_height="wrap_content" android:nestedScrollingEnabled="false"/>
+                <TextView android:id="@+id/tournamentsEmpty" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="No ongoing tournaments right now." android:textColor="@color/text_secondary" android:gravity="center" android:padding="18dp" android:visibility="gone"/>
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="UPCOMING TOURNAMENTS" android:textColor="@color/text_primary" android:textSize="17sp" android:textStyle="bold" android:layout_marginTop="22dp" android:layout_marginBottom="10dp"/>
                 <androidx.recyclerview.widget.RecyclerView android:id="@+id/recyclerTournamentsUpcoming" android:layout_width="match_parent" android:layout_height="wrap_content" android:nestedScrollingEnabled="false"/>
+                <TextView android:id="@+id/upcomingTournamentsEmpty" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="No upcoming tournaments yet." android:textColor="@color/text_secondary" android:gravity="center" android:padding="18dp" android:visibility="gone"/>
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="COMPLETED TOURNAMENTS" android:textColor="@color/text_primary" android:textSize="17sp" android:textStyle="bold" android:layout_marginTop="22dp" android:layout_marginBottom="10dp"/>
+                <androidx.recyclerview.widget.RecyclerView android:id="@+id/recyclerTournamentsCompleted" android:layout_width="match_parent" android:layout_height="wrap_content" android:nestedScrollingEnabled="false"/>
                 </LinearLayout>
             </androidx.core.widget.NestedScrollView>
 

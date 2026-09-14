@@ -1,12 +1,12 @@
 <resources>
-    <color name="primary_purple">#0F766E</color>
-    <color name="bg_app">#0F172A</color>
-    <color name="surface">#134E4A</color>
-    <color name="card">#1E293B</color>
-    <color name="card_border">#0F766E</color>
-    <color name="gold">#F59E0B</color>
-    <color name="gold_deep">#D97706</color>
-    <color name="gold_text_dark">#0F172A</color>
+    <color name="primary_purple">#159A9C</color>
+    <color name="bg_app">#081B24</color>
+    <color name="surface">#103A45</color>
+    <color name="card">#14313B</color>
+    <color name="card_border">#159A9C</color>
+    <color name="gold">#F6C453</color>
+    <color name="gold_deep">#D99A24</color>
+    <color name="gold_text_dark">#10242A</color>
     <color name="text_primary">#FFFFFF</color>
     <color name="text_secondary">#CBD5E1</color>
     <color name="muted_nav">#94A3B8</color>

@@ -35,6 +35,9 @@ import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback;
 import com.google.android.gms.ads.interstitial.InterstitialAd;
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback;
 import java.util.*;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -55,13 +58,15 @@ public class MainActivity extends AppCompatActivity {
     private Button dailyRewardClaim;
     private ImageView imgUserAvatar, imgProfileAvatar, homeTrophy3D;
     private BottomNavigationView bottomNav;
-    private RecyclerView recyclerCategories, recyclerTournamentsFull, recyclerTournamentsUpcoming, recyclerLeaderboardFull;
+    private RecyclerView recyclerCategories, recyclerTournamentsFull, recyclerTournamentsUpcoming, recyclerTournamentsCompleted, recyclerLeaderboardFull;
     private ProgressBar categoriesProgress, tournamentsProgress, leaderboardProgress;
+    private TextView tournamentsEmpty, upcomingEmpty;
 
     private View quizContainer, quizTopicBanner;
     private TextView quizHeader, quizPointsCurrent, tvQuestion, tvTimer, quizTopicIcon, quizTopicName;
     private Button[] btnOpts = new Button[4];
     private CountDownTimer countDownTimer;
+    private boolean authInProgress;
 
     private boolean isLoginMode = true;
     private int userCoins = 100;
@@ -100,8 +105,13 @@ public class MainActivity extends AppCompatActivity {
                     getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 } catch (SecurityException ignored) {
                 }
-                displayProfilePicture(uri.toString());
-                db.child("users").child(auth.getUid()).child("photoUrl").setValue(uri.toString())
+                String persistentPath = copyProfilePicture(uri);
+                if (persistentPath == null) {
+                    Toast.makeText(this, "Could not save profile picture.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                displayProfilePicture(persistentPath);
+                db.child("users").child(auth.getUid()).child("photoUrl").setValue(persistentPath)
                         .addOnFailureListener(error -> Toast.makeText(this, "Could not save profile picture.", Toast.LENGTH_SHORT).show());
             });
 
@@ -196,9 +206,12 @@ public class MainActivity extends AppCompatActivity {
         recyclerCategories = findViewById(R.id.recyclerCategories); recyclerCategories.setLayoutManager(new GridLayoutManager(this, 3));
         recyclerTournamentsFull = findViewById(R.id.recyclerTournamentsFull); recyclerTournamentsFull.setLayoutManager(new LinearLayoutManager(this));
         recyclerTournamentsUpcoming = findViewById(R.id.recyclerTournamentsUpcoming); recyclerTournamentsUpcoming.setLayoutManager(new LinearLayoutManager(this));
+        recyclerTournamentsCompleted = findViewById(R.id.recyclerTournamentsCompleted); recyclerTournamentsCompleted.setLayoutManager(new LinearLayoutManager(this));
         recyclerLeaderboardFull = findViewById(R.id.recyclerLeaderboardFull); recyclerLeaderboardFull.setLayoutManager(new LinearLayoutManager(this));
         categoriesProgress = findViewById(R.id.categoriesLoading);
         tournamentsProgress = findViewById(R.id.tournamentsLoading);
+        tournamentsEmpty = findViewById(R.id.tournamentsEmpty);
+        upcomingEmpty = findViewById(R.id.upcomingTournamentsEmpty);
         leaderboardProgress = findViewById(R.id.leaderboardLoading);
 
         quizContainer = findViewById(R.id.kbcQuizContainer); quizHeader = findViewById(R.id.quizHeader);
@@ -221,6 +234,7 @@ public class MainActivity extends AppCompatActivity {
             pageCategories.setVisibility(item.getItemId() == R.id.nav_categories ? View.VISIBLE : View.GONE);
             pageRank.setVisibility(item.getItemId() == R.id.nav_rank ? View.VISIBLE : View.GONE);
             pageProfile.setVisibility(item.getItemId() == R.id.nav_profile ? View.VISIBLE : View.GONE);
+            if (item.getItemId() == R.id.nav_categories && !tournamentsLoaded && !tournamentsLoading) loadTournaments();
             if (item.getItemId() == R.id.nav_rank && !leaderboardLoaded) loadLeaderboard();
             return true;
         });
@@ -309,16 +323,29 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void handleEmailAuth() {
+        if (authInProgress) return;
         String e = authEmail.getText().toString().trim(), p = authPass.getText().toString().trim();
         if (e.isEmpty() || p.isEmpty()) return;
+        authInProgress = true;
+        btnAuthSubmit.setEnabled(false);
+        btnAuthSubmit.setText(isLoginMode ? "SIGNING IN..." : "CREATING...");
         if (isLoginMode) {
-            auth.signInWithEmailAndPassword(e, p).addOnSuccessListener(res -> showMainApp()).addOnFailureListener(err -> Toast.makeText(this, err.getMessage(), Toast.LENGTH_SHORT).show());
+            auth.signInWithEmailAndPassword(e, p).addOnSuccessListener(res -> { finishAuth(true, null); showMainApp(); }).addOnFailureListener(err -> finishAuth(false, err.getMessage()));
         } else {
-            String u = authUser.getText().toString().trim(); if (u.isEmpty()) return;
+            String u = authUser.getText().toString().trim();
+            if (u.isEmpty()) { finishAuth(false, "Enter a username."); return; }
             auth.createUserWithEmailAndPassword(e, p).addOnSuccessListener(res -> {
-                db.child("users").child(res.getUser().getUid()).setValue(new User(u, e, "", 100)); showMainApp();
-            }).addOnFailureListener(err -> Toast.makeText(this, err.getMessage(), Toast.LENGTH_SHORT).show());
+                db.child("users").child(res.getUser().getUid()).setValue(new User(u, e, "", 100))
+                        .addOnSuccessListener(ignored -> { finishAuth(true, null); showMainApp(); }).addOnFailureListener(err -> finishAuth(false, err.getMessage()));
+            }).addOnFailureListener(err -> finishAuth(false, err.getMessage()));
         }
+    }
+
+    private void finishAuth(boolean success, String message) {
+        authInProgress = false;
+        btnAuthSubmit.setEnabled(true);
+        btnAuthSubmit.setText(isLoginMode ? "LOGIN" : "REGISTER");
+        if (!success && message != null) Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
     }
 
     private void firebaseAuthWithGoogle(String idToken) {
@@ -358,8 +385,6 @@ public class MainActivity extends AppCompatActivity {
         authView.setVisibility(View.GONE); mainAppView.setVisibility(View.VISIBLE);
         bottomNav.setSelectedItemId(R.id.nav_home);
         if (!userDataLoaded && !userDataLoading) loadUserData();
-        if (!tournamentsLoaded && !tournamentsLoading) loadTournaments();
-        if (!leaderboardLoaded && !leaderboardLoading) loadLeaderboard();
         if (!quickCategoriesLoaded && !quickCategoriesLoading) loadQuickCategoriesFromFirebase();
     }
 
@@ -384,7 +409,18 @@ public class MainActivity extends AppCompatActivity {
                 profEmail.setText(email != null ? email : "");
 
                 if (picUrl != null && !picUrl.isEmpty() && !isDestroyed()) {
-                    displayProfilePicture(picUrl);
+                    if (picUrl.startsWith("content://")) {
+                        String migratedPath = copyProfilePicture(Uri.parse(picUrl));
+                        if (migratedPath != null) {
+                            displayProfilePicture(migratedPath);
+                            db.child("users").child(auth.getUid()).child("photoUrl").setValue(migratedPath);
+                        }
+                    } else if (picUrl.startsWith("/") && !new File(picUrl).exists()) {
+                        imgUserAvatar.setImageResource(R.drawable.ic_user);
+                        imgProfileAvatar.setImageResource(R.drawable.ic_user);
+                    } else {
+                        displayProfilePicture(picUrl);
+                    }
                 }
             }
             @Override public void onCancelled(@NonNull DatabaseError e) { userDataLoading = false; }
@@ -393,14 +429,32 @@ public class MainActivity extends AppCompatActivity {
 
     private void displayProfilePicture(String pictureReference) {
         if (pictureReference == null || pictureReference.isEmpty() || isDestroyed()) return;
-        Glide.with(this).load(Uri.parse(pictureReference)).circleCrop().into(imgUserAvatar);
-        Glide.with(this).load(Uri.parse(pictureReference)).circleCrop().into(imgProfileAvatar);
+        Uri pictureUri = pictureReference.startsWith("/") ? Uri.fromFile(new File(pictureReference)) : Uri.parse(pictureReference);
+        Glide.with(this).load(pictureUri).circleCrop().into(imgUserAvatar);
+        Glide.with(this).load(pictureUri).circleCrop().into(imgProfileAvatar);
+    }
+
+    private String copyProfilePicture(Uri source) {
+        if (auth.getUid() == null) return null;
+        File target = new File(getFilesDir(), "profile_" + historyKey(auth.getUid()) + ".img");
+        try (InputStream input = getContentResolver().openInputStream(source);
+             FileOutputStream output = new FileOutputStream(target)) {
+            if (input == null) return null;
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
+            return target.getAbsolutePath();
+        } catch (Exception error) {
+            return null;
+        }
     }
 
     private void removeProfilePicture() {
         if (auth.getUid() == null) return;
         imgUserAvatar.setImageResource(R.drawable.ic_user);
         imgProfileAvatar.setImageResource(R.drawable.ic_user);
+        File localPicture = new File(getFilesDir(), "profile_" + historyKey(auth.getUid()) + ".img");
+        if (localPicture.exists()) localPicture.delete();
         db.child("users").child(auth.getUid()).child("photoUrl").setValue("")
                 .addOnSuccessListener(ignored -> Toast.makeText(this, "Profile picture removed.", Toast.LENGTH_SHORT).show())
                 .addOnFailureListener(error -> Toast.makeText(this, "Could not remove profile picture.", Toast.LENGTH_SHORT).show());
@@ -570,39 +624,52 @@ public class MainActivity extends AppCompatActivity {
             tournamentsLoaded = true;
                 tournamentList.clear();
                 List<Tournament> upcoming = new ArrayList<>();
+                List<Tournament> completed = new ArrayList<>();
                 if (s.exists()) {
                     for (DataSnapshot ds : s.getChildren()) {
                         Tournament t = ds.getValue(Tournament.class);
-                        if (t != null && t.published && isTournamentVisible(t)) {
+                        if (t != null && isPublished(ds)) {
+                            setTournamentStatus(t);
                             t.id = ds.getKey();
                             t.playedCount = (int) ds.child("players").getChildrenCount();
                             t.hasPlayed = auth.getUid() != null && ds.child("players").hasChild(auth.getUid());
-                            if ("UPCOMING".equals(t.status)) upcoming.add(t); else tournamentList.add(t);
+                            if ("UPCOMING".equals(t.status)) upcoming.add(t);
+                            else if ("ENDED".equals(t.status)) completed.add(t);
+                            else tournamentList.add(t);
                         }
                     }
                 }
+                tournamentList.sort(Comparator.comparingLong(t -> t.endTime));
+                upcoming.sort(Comparator.comparingLong(t -> t.startTime));
+                completed.sort((left, right) -> Long.compare(right.endTime, left.endTime));
+                if (tournamentsEmpty != null) tournamentsEmpty.setVisibility(tournamentList.isEmpty() ? View.VISIBLE : View.GONE);
+                if (upcomingEmpty != null) upcomingEmpty.setVisibility(upcoming.isEmpty() ? View.VISIBLE : View.GONE);
                 recyclerTournamentsFull.setAdapter(new TournamentFullAdapter(tournamentList));
                 recyclerTournamentsUpcoming.setAdapter(new TournamentFullAdapter(upcoming));
+                recyclerTournamentsCompleted.setAdapter(new TournamentFullAdapter(completed));
             }
             @Override public void onCancelled(@NonNull DatabaseError e) {
                 tournamentsLoading = false;
                 if (tournamentsProgress != null) tournamentsProgress.setVisibility(View.GONE);
+                if (tournamentsEmpty != null) { tournamentsEmpty.setText("Could not load tournaments: " + e.getMessage()); tournamentsEmpty.setVisibility(View.VISIBLE); }
             }
         });
     }
 
-    private boolean isTournamentVisible(Tournament tournament) {
+    private boolean isPublished(DataSnapshot snapshot) {
+        Boolean published = snapshot.child("published").getValue(Boolean.class);
+        return Boolean.TRUE.equals(published) || "true".equalsIgnoreCase(snapshot.child("published").getValue(String.class));
+    }
+
+    private void setTournamentStatus(Tournament tournament) {
         long now = System.currentTimeMillis();
         if (tournament.startTime > 0 && now < tournament.startTime) {
             tournament.status = "UPCOMING";
-            return true;
-        }
-        if (tournament.endTime > 0 && now >= tournament.endTime) {
+        } else if (tournament.endTime > 0 && now >= tournament.endTime) {
             tournament.status = "ENDED";
-            return false;
+        } else {
+            tournament.status = "ONGOING";
         }
-        tournament.status = "ONGOING";
-        return true;
     }
 
     private void loadQuickCategoriesFromFirebase() {
@@ -630,6 +697,7 @@ public class MainActivity extends AppCompatActivity {
                     List<QuizQuestion> questions = firebaseCategory == null
                             ? starterQuestions(starter)
                             : firebaseQuestions(firebaseCategory);
+                        if (questions.size() > 20) questions = new ArrayList<>(questions.subList(0, 20));
                     List<String[]> missingQuestions = new ArrayList<>();
                     Set<String> existingQuestionTexts = new HashSet<>();
                     for (QuizQuestion question : questions) existingQuestionTexts.add(question.q);
@@ -1011,18 +1079,26 @@ public class MainActivity extends AppCompatActivity {
         @NonNull @Override public VH onCreateViewHolder(@NonNull ViewGroup p, int t) { return new VH(LayoutInflater.from(p.getContext()).inflate(R.layout.item_tournament, p, false)); }
         @Override public void onBindViewHolder(@NonNull VH h, int pos) {
             Tournament t = list.get(pos); h.tTitle.setText(t.title);
-            h.tDetails.setText(t.status + " | FREE | " + t.category + " | " + t.totalQuestions + " questions");
+            h.tDetails.setText(t.status + " | FREE | " + t.category + " | " + t.totalQuestions + " questions\n" + formatTournamentTime(t.startTime) + " - " + formatTournamentTime(t.endTime));
             
             // 3D Realistic Golden Cup pulse animation
             Animation pulse = AnimationUtils.loadAnimation(h.itemView.getContext(), R.anim.pulse_anim);
             h.tCupImage.startAnimation(pulse);
 
-            if (t.hasPlayed) {
+            if ("ENDED".equals(t.status)) {
+                h.btnPlay.setText("COMPLETED"); h.btnPlay.setEnabled(false); h.btnPlay.setBackgroundResource(R.drawable.bg_card); h.btnPlay.setTextColor(ContextCompat.getColor(MainActivity.this, R.color.text_secondary));
+            } else if ("UPCOMING".equals(t.status)) {
+                h.btnPlay.setText("UPCOMING"); h.btnPlay.setEnabled(false); h.btnPlay.setBackgroundResource(R.drawable.bg_card); h.btnPlay.setTextColor(ContextCompat.getColor(MainActivity.this, R.color.text_secondary));
+            } else if (t.hasPlayed) {
                 h.btnPlay.setText("PLAYED"); h.btnPlay.setEnabled(false); h.btnPlay.setBackgroundColor(0xFF3B2A5E); h.btnPlay.setTextColor(0xFF7A6B99);
             } else {
                 h.btnPlay.setText("JOIN"); h.btnPlay.setEnabled(true); h.btnPlay.setBackgroundResource(R.drawable.bg_btn_gold); h.btnPlay.setTextColor(0xFF2A1B00);
             }
             h.btnPlay.setOnClickListener(v -> startQuiz(t));
+        }
+        private String formatTournamentTime(long time) {
+            if (time <= 0) return "Time unavailable";
+            return new java.text.SimpleDateFormat("MMM d, h:mm a", Locale.US).format(new Date(time));
         }
         @Override public int getItemCount() { return list.size(); }
         class VH extends RecyclerView.ViewHolder { TextView tTitle, tDetails; ImageView tCupImage; Button btnPlay; VH(View v) { super(v); tTitle = v.findViewById(R.id.tTitle); tDetails = v.findViewById(R.id.tDetails); tCupImage = v.findViewById(R.id.tCupImage); btnPlay = v.findViewById(R.id.btnPlayTournament); } }
